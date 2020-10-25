@@ -62,83 +62,25 @@ function template_control_login_form() {
   global $context, $settings, $options, $txt, $scripturl, $modSettings;
 
   echo '
-  <form class="login" action="', $context['login_url'], '" name="frmLogin" id="frmLogin" method="post" accept-charset="', $context['character_set'], '">
+    <form data-ajax="false" action="', $scripturl, '?action=login2" name="frmLogin" method="post" accept-charset="', $context['character_set'], '" ', empty($context['disable_login_hashing']) ? ' onsubmit="hashLoginPassword(this, \'' . $context['session_id'] . '\');"' : '', '>
       <div class="no-left-padding input-container pad-top">';
   echo '<span class="input-label">' . $txt['username'] . '</span>';
-  echo '<input type="text" tabindex="', $context['tabindex']++, '" id="', !empty($context['from_ajax']) ? 'ajax_' : '', 'loginuser" name="user" value="', $context['default_username'], '" required>
-  </div>
+  echo '<input class="user" type="text" tabindex="', $context['tabindex']++, '" name="user" />
+      </div>
       <div class="no-left-padding input-container pad-top">';
   echo '<span class="input-label">' . $txt['password'] . '</span>';
-  echo '<input type="password" tabindex="', $context['tabindex']++, '" id="', !empty($context['from_ajax']) ? 'ajax_' : '', 'loginpass" name="passwrd" value="', $context['default_password'], '" size="20" required>
-  </div>
-      <div class="no-left-padding input-container pad-top">';
-  echo '<dt>', $txt['time_logged_in'], ':</dt>
-        <dd>
-          <select name="cookielength" id="cookielength">';
-
-      foreach ($context['login_cookie_times'] as $cookie_time => $cookie_txt)
-      echo '
-            <option value="', $cookie_time, '"', $modSettings['cookieTime'] == $cookie_time ? ' selected' : '', '>', $txt[$cookie_txt], '</option>';
-
-      echo '
-          </select>
-        </dd>';
-	// If they have deleted their account, give them a chance to change their mind.
-	if (isset($context['login_show_undelete']))
-		echo '
-						<dt class="alert">', $txt['undelete_account'], ':</dt>
-						<dd><input type="checkbox" name="undelete"></dd>';
-  	echo '
+  echo '<input type="password" tabindex="', $context['tabindex']++, '" name="passwrd" />
       </div>
+      <div class="no-left-padding input-container pad-top">';
+  echo '<span class="input-label">' . $txt['iRemember'] . '</span>';
+  echo '<input type="checkbox" checked="checked" name="cookieneverexp" value="1" />
+      </div>
+      <input type="hidden" name="hash_passwrd" value="" />
       <div class="buttons" style="margin-top: -9px; padding-bottom: 5px;">
         <button onclick="$(\'.ui-loader\').loader(\'show\');" class="button two-buttons" type="submit">' . $txt['login'] . '</button>
         <button class="button two-buttons" type="button" onclick="go(\'register\')">' . $txt['register'] . '</button>
       </div>
-      <input type="hidden" name="', $context['session_var'], '" value="', $context['session_id'], '">
-      <input type="hidden" name="', $context['login_token_var'], '" value="', $context['login_token'], '">
-      <script>
-      setTimeout(function() {
-        document.getElementById("', !empty($context['from_ajax']) ? 'ajax_' : '', isset($context['default_username']) && $context['default_username'] != '' ? 'loginpass' : 'loginuser', '").focus();
-      }, 150);';
-
-if (!empty($context['from_ajax']))
-echo '
-      form = $("#frmLogin");
-      form.submit(function(e) {
-        e.preventDefault();
-        e.stopPropagation();
-
-        $.ajax({
-          url: form.prop("action"),
-          method: "POST",
-          data: form.serialize(),
-          success: function(data) {
-            if (data.indexOf("<bo" + "dy") > -1) {
-              document.open();
-              document.write(data);
-              document.close();
-            }
-            else
-              form.parent().html($(data).find(".roundframe").html());
-          },
-          error: function(xhr) {
-            var data = xhr.responseText;
-            if (data.indexOf("<bo" + "dy") > -1) {
-              document.open();
-              document.write(data);
-              document.close();
-            }
-            else
-              form.parent().html($(data).filter("#fatal_error").html());
-          }
-        });
-
-        return false;
-      });';
-
-echo '
-    </script>
-  </form>';
+    </form>';
 }
 
 //Add a quick search control where this method is called

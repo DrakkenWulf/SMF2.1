@@ -1,89 +1,143 @@
 <?php
 
 /**
- * This file has functions in it to do with authentication, user handling, and the like.
- *
  * Simple Machines Forum (SMF)
  *
  * @package SMF
- * @author Simple Machines https://www.simplemachines.org
- * @copyright 2020 Simple Machines and individual contributors
- * @license https://www.simplemachines.org/about/smf/license.php BSD
+ * @author Simple Machines http://www.simplemachines.org
+ * @copyright 2011 Simple Machines
+ * @license http://www.simplemachines.org/about/smf/license.php BSD
  *
- * @version 2.1 RC3
+ * @version 2.0.16
  */
 
 if (!defined('SMF'))
-	die('No direct access...');
+	die('Hacking attempt...');
 
-/**
- * Sets the SMF-style login cookie and session based on the id_member and password passed.
- * - password should be already encrypted with the cookie salt.
- * - logs the user out if id_member is zero.
- * - sets the cookie and session to last the number of seconds specified by cookie_length, or
- *   ends them if cookie_length is less than 0.
- * - when logging out, if the globalCookies setting is enabled, attempts to clear the subdomain's
- *   cookie too.
- *
- * @param int $cookie_length How many seconds the cookie should last. If negative, forces logout.
- * @param int $id The ID of the member to set the cookie for
- * @param string $password The hashed password
- */
+/*	This file has functions in it to do with authentication, user handling,
+	and the like.  It provides these functions:
+
+	void setLoginCookie(int cookie_length, int id_member, string password = '')
+		- sets the SMF-style login cookie and session based on the id_member
+		  and password passed.
+		- password should be already encrypted with the cookie salt.
+		- logs the user out if id_member is zero.
+		- sets the cookie and session to last the number of seconds specified
+		  by cookie_length.
+		- when logging out, if the globalCookies setting is enabled, attempts
+		  to clear the subdomain's cookie too.
+
+	array url_parts(bool local, bool global)
+		- returns the path and domain to set the cookie on.
+		- normally, local and global should be the localCookies and
+		  globalCookies settings, respectively.
+		- uses boardurl to determine these two things.
+		- returns an array with domain and path in it, in that order.
+
+	void KickGuest()
+		- throws guests out to the login screen when guest access is off.
+		- sets $_SESSION['login_url'] to $_SERVER['REQUEST_URL'].
+		- uses the 'kick_guest' sub template found in Login.template.php.
+
+	void InMaintenance()
+		- display a message about being in maintenance mode.
+		- display a login screen with sub template 'maintenance'.
+
+	void adminLogin()
+		- double check the verity of the admin by asking for his or her
+		  password.
+		- loads Login.template.php and uses the admin_login sub template.
+		- sends data to template so the admin is sent on to the page they
+		  wanted if their password is correct, otherwise they can try
+		  again.
+
+	string adminLogin_outputPostVars(string key, string value)
+		- used by the adminLogin() function.
+		- returns 'hidden' HTML form fields, containing key-value-pairs.
+		- if 'value' is an array, the function is called recursively.
+
+	array findMembers(array names, bool use_wildcards = false,
+			bool buddies_only = false, int max = 500)
+		- searches for members whose username, display name, or e-mail address
+		  match the given pattern of array names.
+		- accepts wildcards ? and * in the patern if use_wildcards is set.
+		- retrieves a maximum of max members, if passed.
+		- searches only buddies if buddies_only is set.
+		- returns an array containing information about the matching members.
+
+	void JSMembers()
+		- called by index.php?action=findmember.
+		- is used as a popup for searching members.
+		- uses sub template find_members of the Help template.
+		- also used to add members for PM's sent using wap2/imode protocol.
+
+	void RequestMembers()
+		- used by javascript to find members matching the request.
+		- outputs each member name on its own line.
+
+	void resetPassword(int id_member, string username = null)
+		- called by Profile.php when changing someone's username.
+		- checks the validity of the new username.
+		- generates and sets a new password for the given user.
+		- mails the new password to the email address of the user.
+		- if username is not set, only a new password is generated and sent.
+
+	string validateUsername(int memID, string username)
+		- checks a username obeys a load of rules. Returns null if fine.
+
+	string validatePassword(string password, string username,
+			array restrict_in = none)
+		- called when registering/choosing a password.
+		- checks the password obeys the current forum settings for password
+		  strength.
+		- if password checking is enabled, will check that none of the words
+		  in restrict_in appear in the password.
+		- returns an error identifier if the password is invalid, or null.
+
+	void rebuildModCache()
+		- stores some useful information on the current users moderation powers in the session.
+
+*/
+
+// Actually set the login cookie...
 function setLoginCookie($cookie_length, $id, $password = '')
 {
-	global $smcFunc, $cookiename, $boardurl, $modSettings, $sourcedir;
-
-	$id = (int) $id;
-
-	$expiry_time = ($cookie_length >= 0 ? time() + $cookie_length : 1);
+	global $cookiename, $cookie_no_auth_secret, $boardurl, $modSettings;
 
 	// If changing state force them to re-address some permission caching.
 	$_SESSION['mc']['time'] = 0;
 
-	// Extract our cookie domain and path from $boardurl
-	$cookie_url = url_parts(!empty($modSettings['localCookies']), !empty($modSettings['globalCookies']));
-
 	// The cookie may already exist, and have been set with different options.
-	if (isset($_COOKIE[$cookiename]))
+	$cookie_state = (empty($modSettings['localCookies']) ? 0 : 1) | (empty($modSettings['globalCookies']) ? 0 : 2);
+	if (isset($_COOKIE[$cookiename]) && preg_match('~^a:[34]:\{i:0;(i:\d{1,6}|s:[1-8]:"\d{1,8}");i:1;s:(0|40):"([a-fA-F0-9]{40})?";i:2;[id]:\d{1,14};(i:3;i:\d;)?\}$~', $_COOKIE[$cookiename]) === 1)
 	{
-		// First check for 2.1 json-format cookie
-		if (preg_match('~^{"0":\d+,"1":"[0-9a-f]*","2":\d+,"3":"[^"]+","4":"[^"]+"~', $_COOKIE[$cookiename]) === 1)
-			list(,,, $old_domain, $old_path) = $smcFunc['json_decode']($_COOKIE[$cookiename], true);
-
-		// Legacy format (for recent 2.0 --> 2.1 upgrades)
-		elseif (preg_match('~^a:[34]:\{i:0;i:\d+;i:1;s:(0|40):"([a-fA-F0-9]{40})?";i:2;[id]:\d+;(i:3;i:\d;)?~', $_COOKIE[$cookiename]) === 1)
-		{
-			list(,,, $old_state) = safe_unserialize($_COOKIE[$cookiename]);
-
-			$cookie_state = (empty($modSettings['localCookies']) ? 0 : 1) | (empty($modSettings['globalCookies']) ? 0 : 2);
-
-			// Maybe we need to temporarily pretend to be using local cookies
-			if ($cookie_state == 0 && $old_state == 1)
-				list($old_domain, $old_path) = url_parts(true, false);
-			else
-				list($old_domain, $old_path) = url_parts($old_state & 1 > 0, $old_state & 2 > 0);
-		}
+		$array = safe_unserialize($_COOKIE[$cookiename]);
 
 		// Out with the old, in with the new!
-		if (isset($old_domain) && $old_domain != $cookie_url[0] || isset($old_path) && $old_path != $cookie_url[1])
-			smf_setcookie($cookiename, $smcFunc['json_encode'](array(0, '', 0, $old_domain, $old_path), JSON_FORCE_OBJECT), 1, $old_path, $old_domain);
+		if (isset($array[3]) && $array[3] != $cookie_state)
+		{
+			$cookie_url = url_parts($array[3] & 1 > 0, $array[3] & 2 > 0);
+			setcookie($cookiename, serialize(array(0, '', 0)), time() - 3600, $cookie_url[1], $cookie_url[0], !empty($modSettings['secureCookies']));
+		}
 	}
 
+	// Fallback option to support outdated mods. This will be removed in future versions!
+	$no_auth_secret = !empty($cookie_no_auth_secret) && !empty($modSettings['integrate_verify_user']);
+
+	// Ensure the cookie can't be forged.
+	if ($password !== '' && !$no_auth_secret)
+		$password = hash_hmac('sha1', $password, get_auth_secret());
+
 	// Get the data and path to set it on.
-	$data = empty($id) ? array(0, '', 0, $cookie_url[0], $cookie_url[1]) : array($id, $password, $expiry_time, $cookie_url[0], $cookie_url[1]);
-
-	// Allow mods to add custom info to the cookie
-	$custom_data = array();
-	call_integration_hook('integrate_cookie_data', array($data, &$custom_data));
-
-	$data = $smcFunc['json_encode'](array_merge($data, $custom_data), JSON_FORCE_OBJECT);
+	$data = serialize(empty($id) ? array(0, '', 0) : array($id, $password, time() + $cookie_length, $cookie_state));
+	$cookie_url = url_parts(!empty($modSettings['localCookies']), !empty($modSettings['globalCookies']));
 
 	// Set the cookie, $_COOKIE, and session variable.
-	smf_setcookie($cookiename, $data, $expiry_time, $cookie_url[1], $cookie_url[0]);
+	setcookie($cookiename, $data, time() + $cookie_length, $cookie_url[1], $cookie_url[0], !empty($modSettings['secureCookies']));
 
 	// If subdomain-independent cookies are on, unset the subdomain-dependent cookie too.
 	if (empty($id) && !empty($modSettings['globalCookies']))
-		smf_setcookie($cookiename, $data, $expiry_time, $cookie_url[1], '');
+		setcookie($cookiename, $data, time() + $cookie_length, $cookie_url[1], '', !empty($modSettings['secureCookies']));
 
 	// Any alias URLs?  This is mainly for use with frames, etc.
 	if (!empty($modSettings['forum_alias_urls']))
@@ -102,12 +156,7 @@ function setLoginCookie($cookie_length, $id, $password = '')
 			if ($cookie_url[0] == '')
 				$cookie_url[0] = strtok($alias, '/');
 
-			$alias_data = $smcFunc['json_decode']($data, true);
-			$alias_data[3] = $cookie_url[0];
-			$alias_data[4] = $cookie_url[1];
-			$alias_data = $smcFunc['json_encode']($alias_data, JSON_FORCE_OBJECT);
-
-			smf_setcookie($cookiename, $alias_data, $expiry_time, $cookie_url[1], $cookie_url[0]);
+			setcookie($cookiename, $data, time() + $cookie_length, $cookie_url[1], $cookie_url[0], !empty($modSettings['secureCookies']));
 		}
 
 		$boardurl = $temp;
@@ -118,9 +167,6 @@ function setLoginCookie($cookie_length, $id, $password = '')
 	// Make sure the user logs in with a new session ID.
 	if (!isset($_SESSION['login_' . $cookiename]) || $_SESSION['login_' . $cookiename] !== $data)
 	{
-		// We need to meddle with the session.
-		require_once($sourcedir . '/Session.php');
-
 		// Backup and remove the old session.
 		$oldSessionData = $_SESSION;
 		$_SESSION = array();
@@ -128,55 +174,39 @@ function setLoginCookie($cookie_length, $id, $password = '')
 
 		// Recreate and restore the new session.
 		loadSession();
-		// @todo should we use session_regenerate_id(true); now that we are 5.1+
 		session_regenerate_id();
 		$_SESSION = $oldSessionData;
+
+		// Version 4.3.2 didn't store the cookie of the new session.
+		if (version_compare(PHP_VERSION, '4.3.2') === 0)
+		{
+			$sessionCookieLifetime = @ini_get('session.cookie_lifetime');
+			setcookie(session_name(), session_id(), time() + (empty($sessionCookieLifetime) ? $cookie_length : $sessionCookieLifetime), $cookie_url[1], $cookie_url[0], !empty($modSettings['secureCookies']));
+		}
 
 		$_SESSION['login_' . $cookiename] = $data;
 	}
 }
 
-/**
- * Sets Two Factor Auth cookie
- *
- * @param int $cookie_length How long the cookie should last, in seconds
- * @param int $id The ID of the member
- * @param string $secret Should be a salted secret using hash_salt
- */
-function setTFACookie($cookie_length, $id, $secret)
+// PHP < 4.3.2 doesn't have this function
+if (!function_exists('session_regenerate_id'))
 {
-	global $smcFunc, $modSettings, $cookiename;
+	function session_regenerate_id()
+	{
+		// Too late to change the session now.
+		if (headers_sent())
+			return false;
 
-	$expiry_time = ($cookie_length >= 0 ? time() + $cookie_length : 1);
+		session_id(strtolower(md5(uniqid(mt_rand(), true))));
+		return true;
+	}
 
-	$identifier = $cookiename . '_tfa';
-	$cookie_url = url_parts(!empty($modSettings['localCookies']), !empty($modSettings['globalCookies']));
-
-	// Get the data and path to set it on.
-	$data = $smcFunc['json_encode'](empty($id) ? array(0, '', 0, $cookie_url[0], $cookie_url[1], false) : array($id, $secret, $expiry_time, $cookie_url[0], $cookie_url[1]), JSON_FORCE_OBJECT);
-
-	// Set the cookie, $_COOKIE, and session variable.
-	smf_setcookie($identifier, $data, $expiry_time, $cookie_url[1], $cookie_url[0]);
-
-	// If subdomain-independent cookies are on, unset the subdomain-dependent cookie too.
-	if (empty($id) && !empty($modSettings['globalCookies']))
-		smf_setcookie($identifier, $data, $expiry_time, $cookie_url[1], '');
-
-	$_COOKIE[$identifier] = $data;
 }
 
-/**
- * Get the domain and path for the cookie
- * - normally, local and global should be the localCookies and globalCookies settings, respectively.
- * - uses boardurl to determine these two things.
- *
- * @param bool $local Whether we want local cookies
- * @param bool $global Whether we want global cookies
- * @return array An array to set the cookie on with domain and path in it, in that order
- */
+// Get the domain and path for the cookie...
 function url_parts($local, $global)
 {
-	global $boardurl, $modSettings;
+	global $boardurl;
 
 	// Parse the URL with PHP to make life easier.
 	$parsed_url = parse_url($boardurl);
@@ -185,12 +215,9 @@ function url_parts($local, $global)
 	if (empty($parsed_url['path']) || !$local)
 		$parsed_url['path'] = '';
 
-	if (!empty($modSettings['globalCookiesDomain']) && strpos($boardurl, $modSettings['globalCookiesDomain']) !== false)
-		$parsed_url['host'] = $modSettings['globalCookiesDomain'];
-
 	// Globalize cookies across domains (filter out IP-addresses)?
-	elseif ($global && preg_match('~^\d{1,3}(\.\d{1,3}){3}$~', $parsed_url['host']) == 0 && preg_match('~(?:[^\.]+\.)?([^\.]{2,}\..+)\z~i', $parsed_url['host'], $parts) == 1)
-		$parsed_url['host'] = '.' . $parts[1];
+	if ($global && preg_match('~^\d{1,3}(\.\d{1,3}){3}$~', $parsed_url['host']) == 0 && preg_match('~(?:[^\.]+\.)?([^\.]{2,}\..+)\z~i', $parsed_url['host'], $parts) == 1)
+			$parsed_url['host'] = '.' . $parts[1];
 
 	// We shouldn't use a host at all if both options are off.
 	elseif (!$local && !$global)
@@ -203,18 +230,13 @@ function url_parts($local, $global)
 	return array($parsed_url['host'], $parsed_url['path'] . '/');
 }
 
-/**
- * Throws guests out to the login screen when guest access is off.
- * - sets $_SESSION['login_url'] to $_SERVER['REQUEST_URL'].
- * - uses the 'kick_guest' sub template found in Login.template.php.
- */
+// Kick out a guest when guest access is off...
 function KickGuest()
 {
 	global $txt, $context;
 
 	loadLanguage('Login');
 	loadTemplate('Login');
-	createToken('login');
 
 	// Never redirect to an attachment
 	if (strpos($_SERVER['REQUEST_URL'], 'dlattach') === false)
@@ -224,21 +246,16 @@ function KickGuest()
 	$context['page_title'] = $txt['login'];
 }
 
-/**
- * Display a message about the forum being in maintenance mode.
- * - display a login screen with sub template 'maintenance'.
- * - sends a 503 header, so search engines don't bother indexing while we're in maintenance mode.
- */
+// Display a message about the forum being in maintenance mode, etc.
 function InMaintenance()
 {
 	global $txt, $mtitle, $mmessage, $context, $smcFunc;
 
 	loadLanguage('Login');
 	loadTemplate('Login');
-	createToken('login');
 
 	// Send a 503 header, so search engines don't bother indexing while we're in maintenance mode.
-	send_http_status(503, 'Service Temporarily Unavailable');
+	header('HTTP/1.1 503 Service Temporarily Unavailable');
 
 	// Basic template stuff..
 	$context['sub_template'] = 'maintenance';
@@ -247,41 +264,26 @@ function InMaintenance()
 	$context['page_title'] = $txt['maintain_mode'];
 }
 
-/**
- * Question the verity of the admin by asking for his or her password.
- * - loads Login.template.php and uses the admin_login sub template.
- * - sends data to template so the admin is sent on to the page they
- *   wanted if their password is correct, otherwise they can try again.
- *
- * @param string $type What login type is this - can be 'admin' or 'moderate'
- */
-function adminLogin($type = 'admin')
+function adminLogin()
 {
-	global $context, $txt, $user_info;
+	global $context, $scripturl, $txt, $user_info, $user_settings;
 
 	loadLanguage('Admin');
 	loadTemplate('Login');
 
-	// Validate what type of session check this is.
-	$types = array();
-	call_integration_hook('integrate_validateSession', array(&$types));
-	$type = in_array($type, $types) || $type == 'moderate' ? $type : 'admin';
-
 	// They used a wrong password, log it and unset that.
-	if (isset($_POST[$type . '_hash_pass']) || isset($_POST[$type . '_pass']))
+	if (isset($_POST['admin_hash_pass']) || isset($_POST['admin_pass']))
 	{
 		$txt['security_wrong'] = sprintf($txt['security_wrong'], isset($_SERVER['HTTP_REFERER']) ? $_SERVER['HTTP_REFERER'] : $txt['unknown'], $_SERVER['HTTP_USER_AGENT'], $user_info['ip']);
 		log_error($txt['security_wrong'], 'critical');
 
-		if (isset($_POST[$type . '_hash_pass']))
-			unset($_POST[$type . '_hash_pass']);
-		if (isset($_POST[$type . '_pass']))
-			unset($_POST[$type . '_pass']);
+		if (isset($_POST['admin_hash_pass']))
+			unset($_POST['admin_hash_pass']);
+		if (isset($_POST['admin_pass']))
+			unset($_POST['admin_pass']);
 
 		$context['incorrect_password'] = true;
 	}
-
-	createToken('admin-login');
 
 	// Figure out the get data and post data.
 	$context['get_data'] = '?' . construct_query_string($_GET);
@@ -299,30 +301,19 @@ function adminLogin($type = 'admin')
 	if (!isset($context['page_title']))
 		$context['page_title'] = $txt['login'];
 
-	// The type of action.
-	$context['sessionCheckType'] = $type;
-
 	obExit();
 
 	// We MUST exit at this point, because otherwise we CANNOT KNOW that the user is privileged.
 	trigger_error('Hacking attempt...', E_USER_ERROR);
 }
 
-/**
- * Used by the adminLogin() function.
- * if 'value' is an array, the function is called recursively.
- *
- * @param string $k The keys
- * @param string $v The values
- * @return string 'hidden' HTML form fields, containing key-value-pairs
- */
 function adminLogin_outputPostVars($k, $v)
 {
 	global $smcFunc;
 
 	if (!is_array($v))
 		return '
-<input type="hidden" name="' . $smcFunc['htmlspecialchars']($k) . '" value="' . strtr($v, array('"' => '&quot;', '<' => '&lt;', '>' => '&gt;')) . '">';
+<input type="hidden" name="' . htmlspecialchars($k) . '" value="' . strtr($v, array('"' => '&quot;', '<' => '&lt;', '>' => '&gt;')) . '" />';
 	else
 	{
 		$ret = '';
@@ -333,12 +324,6 @@ function adminLogin_outputPostVars($k, $v)
 	}
 }
 
-/**
- * Properly urlencodes a string to be used in a query
- *
- * @param string $get
- * @return string Our query string
- */
 function construct_query_string($get)
 {
 	global $scripturl;
@@ -372,20 +357,10 @@ function construct_query_string($get)
 	return $query_string;
 }
 
-/**
- * Finds members by email address, username, or real name.
- * - searches for members whose username, display name, or e-mail address match the given pattern of array names.
- * - searches only buddies if buddies_only is set.
- *
- * @param array $names The names of members to search for
- * @param bool $use_wildcards Whether to use wildcards. Accepts wildcards ? and * in the pattern if true
- * @param bool $buddies_only Whether to only search for the user's buddies
- * @param int $max The maximum number of results
- * @return array An array containing information about the matching members
- */
+// Find members by email address, username, or real name.
 function findMembers($names, $use_wildcards = false, $buddies_only = false, $max = 500)
 {
-	global $scripturl, $user_info, $smcFunc;
+	global $scripturl, $user_info, $modSettings, $smcFunc;
 
 	// If it's not already an array, make it one.
 	if (!is_array($names))
@@ -417,9 +392,11 @@ function findMembers($names, $use_wildcards = false, $buddies_only = false, $max
 	$results = array();
 
 	// This ensures you can't search someones email address if you can't see it.
-	if (($use_wildcards || $maybe_email) && allowedTo('moderate_forum'))
+	$email_condition = allowedTo('moderate_forum') ? '' : 'hide_email = 0 AND ';
+
+	if ($use_wildcards || $maybe_email)
 		$email_condition = '
-			OR (email_address ' . $comparison . ' \'' . implode('\') OR (email_address ' . $comparison . ' \'', $names) . '\')';
+			OR (' . $email_condition . 'email_address ' . $comparison . ' \'' . implode( '\') OR (' . $email_condition . ' email_address ' . $comparison . ' \'', $names) . '\')';
 	else
 		$email_condition = '';
 
@@ -428,12 +405,12 @@ function findMembers($names, $use_wildcards = false, $buddies_only = false, $max
 	$real_name = $smcFunc['db_case_sensitive'] ? 'LOWER(real_name)' : 'real_name';
 
 	// Searches.
-	$member_name_search = $member_name . ' ' . $comparison . ' ' . implode(' OR ' . $member_name . ' ' . $comparison . ' ', $names_list);
-	$real_name_search = $real_name . ' ' . $comparison . ' ' . implode(' OR ' . $real_name . ' ' . $comparison . ' ', $names_list);
+	$member_name_search = $member_name . ' ' . $comparison . ' ' . implode( ' OR ' . $member_name . ' ' . $comparison . ' ', $names_list);
+	$real_name_search = $real_name . ' ' . $comparison . ' ' . implode( ' OR ' . $real_name . ' ' . $comparison . ' ', $names_list);
 
 	// Search by username, display name, and email address.
 	$request = $smcFunc['db_query']('', '
-		SELECT id_member, member_name, real_name, email_address
+		SELECT id_member, member_name, real_name, email_address, hide_email
 		FROM {db_prefix}members
 		WHERE (' . $member_name_search . '
 			OR ' . $real_name_search . ' ' . $email_condition . ')
@@ -451,7 +428,7 @@ function findMembers($names, $use_wildcards = false, $buddies_only = false, $max
 			'id' => $row['id_member'],
 			'name' => $row['real_name'],
 			'username' => $row['member_name'],
-			'email' => allowedTo('moderate_forum') ? $row['email_address'] : '',
+			'email' => in_array(showEmailAddress(!empty($row['hide_email']), $row['id_member']), array('yes', 'yes_permission_override')) ? $row['email_address'] : '',
 			'href' => $scripturl . '?action=profile;u=' . $row['id_member'],
 			'link' => '<a href="' . $scripturl . '?action=profile;u=' . $row['id_member'] . '">' . $row['real_name'] . '</a>'
 		);
@@ -462,23 +439,22 @@ function findMembers($names, $use_wildcards = false, $buddies_only = false, $max
 	return $results;
 }
 
-/**
- * Called by index.php?action=findmember.
- * - is used as a popup for searching members.
- * - uses sub template find_members of the Help template.
- * - also used to add members for PM's sent using wap2/imode protocol.
- */
 function JSMembers()
 {
 	global $context, $scripturl, $user_info, $smcFunc;
 
 	checkSession('get');
 
-	// Why is this in the Help template, you ask?  Well, erm... it helps you.  Does that work?
-	loadTemplate('Help');
+	if (WIRELESS)
+		$context['sub_template'] = WIRELESS_PROTOCOL . '_pm';
+	else
+	{
+		// Why is this in the Help template, you ask?  Well, erm... it helps you.  Does that work?
+		loadTemplate('Help');
 
-	$context['template_layers'] = array();
-	$context['sub_template'] = 'find_members';
+		$context['template_layers'] = array();
+		$context['sub_template'] = 'find_members';
+	}
 
 	if (isset($_REQUEST['search']))
 		$context['last_search'] = $smcFunc['htmlspecialchars']($_REQUEST['search'], ENT_QUOTES);
@@ -509,7 +485,7 @@ function JSMembers()
 
 		$context['page_index'] = constructPageIndex($scripturl . '?action=findmember;search=' . $context['last_search'] . ';' . $context['session_var'] . '=' . $context['session_id'] . ';input=' . $context['input_box_name'] . ($context['quote_results'] ? ';quote=1' : '') . ($context['buddy_search'] ? ';buddies' : ''), $_REQUEST['start'], $total_results, 7);
 
-		// Determine the navigation context.
+		// Determine the navigation context (especially useful for the wireless template).
 		$base_url = $scripturl . '?action=findmember;search=' . urlencode($context['last_search']) . (empty($_REQUEST['u']) ? '' : ';u=' . $_REQUEST['u']) . ';' . $context['session_var'] . '=' . $context['session_id'];
 		$context['links'] = array(
 			'first' => $_REQUEST['start'] >= 7 ? $base_url . ';start=0' : '',
@@ -529,10 +505,6 @@ function JSMembers()
 		$context['links']['up'] = $scripturl . '?action=pm;sa=send' . (empty($_REQUEST['u']) ? '' : ';u=' . $_REQUEST['u']);
 }
 
-/**
- * Outputs each member name on its own line.
- * - used by javascript to find members matching the request.
- */
 function RequestMembers()
 {
 	global $user_info, $txt, $smcFunc;
@@ -544,17 +516,16 @@ function RequestMembers()
 	$_REQUEST['search'] = strtr($_REQUEST['search'], array('%' => '\%', '_' => '\_', '*' => '%', '?' => '_', '&#038;' => '&amp;'));
 
 	if (function_exists('iconv'))
-		header('content-type: text/plain; charset=UTF-8');
+		header('Content-Type: text/plain; charset=UTF-8');
 
 	$request = $smcFunc['db_query']('', '
 		SELECT real_name
 		FROM {db_prefix}members
-		WHERE {raw:real_name} LIKE {string:search}' . (isset($_REQUEST['buddies']) ? '
+		WHERE real_name LIKE {string:search}' . (isset($_REQUEST['buddies']) ? '
 			AND id_member IN ({array_int:buddy_list})' : '') . '
 			AND is_activated IN (1, 11)
 		LIMIT ' . ($smcFunc['strlen']($_REQUEST['search']) <= 2 ? '100' : '800'),
 		array(
-			'real_name' => $smcFunc['db_case_sensitive'] ? 'LOWER(real_name)' : 'real_name',
 			'buddy_list' => $user_info['buddies'],
 			'search' => $_REQUEST['search'],
 		)
@@ -571,7 +542,19 @@ function RequestMembers()
 		$row['real_name'] = strtr($row['real_name'], array('&amp;' => '&#038;', '&lt;' => '&#060;', '&gt;' => '&#062;', '&quot;' => '&#034;'));
 
 		if (preg_match('~&#\d+;~', $row['real_name']) != 0)
+		{
+			$fixchar = create_function('$n', '
+				if ($n < 128)
+					return chr($n);
+				elseif ($n < 2048)
+					return chr(192 | $n >> 6) . chr(128 | $n & 63);
+				elseif ($n < 65536)
+					return chr(224 | $n >> 12) . chr(128 | $n >> 6 & 63) . chr(128 | $n & 63);
+				else
+					return chr(240 | $n >> 18) . chr(128 | $n >> 12 & 63) . chr(128 | $n >> 6 & 63) . chr(128 | $n & 63);');
+
 			$row['real_name'] = preg_replace_callback('~&#(\d+);~', 'fixchar__callback', $row['real_name']);
+		}
 
 		echo $row['real_name'], "\n";
 	}
@@ -580,20 +563,10 @@ function RequestMembers()
 	obExit(false);
 }
 
-/**
- * Generates a random password for a user and emails it to them.
- * - called by Profile.php when changing someone's username.
- * - checks the validity of the new username.
- * - generates and sets a new password for the given user.
- * - mails the new password to the email address of the user.
- * - if username is not set, only a new password is generated and sent.
- *
- * @param int $memID The ID of the member
- * @param string $username The new username. If set, also checks the validity of the username
- */
+// This function generates a random password for a user and emails it to them.
 function resetPassword($memID, $username = null)
 {
-	global $sourcedir, $modSettings, $smcFunc, $language;
+	global $scripturl, $context, $txt, $sourcedir, $modSettings, $smcFunc, $language;
 
 	// Language... and a required file.
 	loadLanguage('Login');
@@ -618,8 +591,8 @@ function resetPassword($memID, $username = null)
 	}
 
 	// Generate a random password.
-	$newPassword = substr(preg_replace('/\W/', '', md5($smcFunc['random_int']())), 0, 10);
-	$newPassword_sha1 = hash_password($user, $newPassword);
+	$newPassword = substr(preg_replace('/\W/', '', md5(mt_rand())), 0, 10);
+	$newPassword_sha1 = sha1(strtolower($user) . $newPassword);
 
 	// Do some checks on the username if needed.
 	if ($username !== null)
@@ -642,70 +615,33 @@ function resetPassword($memID, $username = null)
 	$emaildata = loadEmailTemplate('change_password', $replacements, empty($lngfile) || empty($modSettings['userLanguage']) ? $language : $lngfile);
 
 	// Send them the email informing them of the change - then we're done!
-	sendmail($email, $emaildata['subject'], $emaildata['body'], null, 'chgpass' . $memID, $emaildata['is_html'], 0);
+	sendmail($email, $emaildata['subject'], $emaildata['body'], null, null, false, 0);
 }
 
-/**
- * Checks a username obeys a load of rules
- *
- * @param int $memID The ID of the member
- * @param string $username The username to validate
- * @param boolean $return_error Whether to return errors
- * @param boolean $check_reserved_name Whether to check this against the list of reserved names
- * @return array|null Null if there are no errors, otherwise an array of errors if return_error is true
- */
-function validateUsername($memID, $username, $return_error = false, $check_reserved_name = true)
+// Is this a valid username?
+function validateUsername($memID, $username)
 {
-	global $sourcedir, $txt, $smcFunc, $user_info;
-
-	$errors = array();
-
-	// Don't use too long a name.
-	if ($smcFunc['strlen']($username) > 25)
-		$errors[] = array('lang', 'error_long_name');
+	global $sourcedir, $txt;
 
 	// No name?!  How can you register with no name?
 	if ($username == '')
-		$errors[] = array('lang', 'need_username');
+		fatal_lang_error('need_username', false);
 
 	// Only these characters are permitted.
 	if (in_array($username, array('_', '|')) || preg_match('~[<>&"\'=\\\\]~', preg_replace('~&#(?:\\d{1,7}|x[0-9a-fA-F]{1,6});~', '', $username)) != 0 || strpos($username, '[code') !== false || strpos($username, '[/code') !== false)
-		$errors[] = array('lang', 'error_invalid_characters_username');
+		fatal_lang_error('error_invalid_characters_username', false);
 
 	if (stristr($username, $txt['guest_title']) !== false)
-		$errors[] = array('lang', 'username_reserved', 'general', array($txt['guest_title']));
+		fatal_lang_error('username_reserved', true, array($txt['guest_title']));
 
-	if ($check_reserved_name)
-	{
-		require_once($sourcedir . '/Subs-Members.php');
-		if (isReservedName($username, $memID, false))
-			$errors[] = array('done', '(' . $smcFunc['htmlspecialchars']($username) . ') ' . $txt['name_in_use']);
-	}
+	require_once($sourcedir . '/Subs-Members.php');
+	if (isReservedName($username, $memID, false))
+		fatal_error('(' . htmlspecialchars($username) . ') ' . $txt['name_in_use'], false);
 
-	if ($return_error)
-		return $errors;
-	elseif (empty($errors))
-		return null;
-
-	loadLanguage('Errors');
-	$error = $errors[0];
-
-	$message = $error[0] == 'lang' ? (empty($error[3]) ? $txt[$error[1]] : vsprintf($txt[$error[1]], $error[3])) : $error[1];
-	fatal_error($message, empty($error[2]) || $user_info['is_admin'] ? false : $error[2]);
+	return null;
 }
 
-/**
- * Checks whether a password meets the current forum rules
- * - called when registering/choosing a password.
- * - checks the password obeys the current forum settings for password strength.
- * - if password checking is enabled, will check that none of the words in restrict_in appear in the password.
- * - returns an error identifier if the password is invalid, or null.
- *
- * @param string $password The desired password
- * @param string $username The username
- * @param array $restrict_in An array of restricted strings that cannot be part of the password (email address, username, etc.)
- * @return null|string Null if valid or a string indicating what the problem was
- */
+// This function simply checks whether a password meets the current forum rules.
 function validatePassword($password, $username, $restrict_in = array())
 {
 	global $modSettings, $smcFunc;
@@ -724,6 +660,8 @@ function validatePassword($password, $username, $restrict_in = array())
 	elseif ($smcFunc['strpos']($password, $username) !== false)
 		return 'restricted_words';
 
+	// !!! If pspell is available, use it on the word, and return restricted_words if it doesn't give "bad spelling"?
+
 	// If just medium, we're done.
 	if ($modSettings['password_strength'] == 1)
 		return null;
@@ -735,11 +673,7 @@ function validatePassword($password, $username, $restrict_in = array())
 	return $good ? null : 'chars';
 }
 
-/**
- * Quickly find out what moderation authority this user has
- * - builds the moderator, group and board level querys for the user
- * - stores the information on the current users moderation powers in $user_info['mod_cache'] and $_SESSION['mc']
- */
+// Quickly find out what this user can and cannot do.
 function rebuildModCache()
 {
 	global $user_info, $smcFunc;
@@ -747,7 +681,7 @@ function rebuildModCache()
 	// What groups can they moderate?
 	$group_query = allowedTo('manage_membergroups') ? '1=1' : '0=1';
 
-	if ($group_query == '0=1' && !$user_info['is_guest'])
+	if ($group_query == '0=1')
 	{
 		$request = $smcFunc['db_query']('', '
 			SELECT id_group
@@ -771,7 +705,7 @@ function rebuildModCache()
 	// Then, same again, just the boards this time!
 	$board_query = allowedTo('moderate_forum') ? '1=1' : '0=1';
 
-	if ($board_query == '0=1' && !$user_info['is_guest'])
+	if ($board_query == '0=1')
 	{
 		$boards = boardsAllowedTo('moderate_board', true);
 
@@ -796,22 +730,6 @@ function rebuildModCache()
 		while ($row = $smcFunc['db_fetch_assoc']($request))
 			$boards_mod[] = $row['id_board'];
 		$smcFunc['db_free_result']($request);
-
-		// Can any of the groups they're in moderate any of the boards?
-		$request = $smcFunc['db_query']('', '
-			SELECT id_board
-			FROM {db_prefix}moderator_groups
-			WHERE id_group IN({array_int:groups})',
-			array(
-				'groups' => $user_info['groups'],
-			)
-		);
-		while ($row = $smcFunc['db_fetch_assoc']($request))
-			$boards_mod[] = $row['id_board'];
-		$smcFunc['db_free_result']($request);
-
-		// Just in case we've got duplicates here...
-		$boards_mod = array_unique($boards_mod);
 	}
 
 	$mod_query = empty($boards_mod) ? '0=1' : 'b.id_board IN (' . implode(',', $boards_mod) . ')';
@@ -827,155 +745,8 @@ function rebuildModCache()
 		'mb' => $boards_mod,
 		'mq' => $mod_query,
 	);
-	call_integration_hook('integrate_mod_cache');
 
 	$user_info['mod_cache'] = $_SESSION['mc'];
-
-	// Might as well clean up some tokens while we are at it.
-	cleanTokens();
-}
-
-/**
- * A wrapper for setcookie that gives integration hook access to it
- *
- * @param string $name
- * @param string $value = ''
- * @param int $expire = 0
- * @param string $path = ''
- * @param string $domain = ''
- * @param bool $secure = false
- * @param bool $httponly = true
- */
-function smf_setcookie($name, $value = '', $expire = 0, $path = '', $domain = '', $secure = null, $httponly = true)
-{
-	global $modSettings;
-
-	// In case a customization wants to override the default settings
-	if ($httponly === null)
-		$httponly = !empty($modSettings['httponlyCookies']);
-	if ($secure === null)
-		$secure = !empty($modSettings['secureCookies']);
-
-	// Intercept cookie?
-	call_integration_hook('integrate_cookie', array($name, $value, $expire, $path, $domain, $secure, $httponly));
-
-	return setcookie($name, $value, $expire, $path, $domain, $secure, $httponly);
-}
-
-/**
- * Hashes username with password
- *
- * @param string $username The username
- * @param string $password The unhashed password
- * @param int $cost The cost
- * @return string The hashed password
- */
-function hash_password($username, $password, $cost = null)
-{
-	global $sourcedir, $smcFunc, $modSettings;
-	if (!function_exists('password_hash'))
-		require_once($sourcedir . '/Subs-Password.php');
-
-	$cost = empty($cost) ? (empty($modSettings['bcrypt_hash_cost']) ? 10 : $modSettings['bcrypt_hash_cost']) : $cost;
-
-	return password_hash($smcFunc['strtolower']($username) . $password, PASSWORD_BCRYPT, array(
-		'cost' => $cost,
-	));
-}
-
-/**
- * Hashes password with salt and authentication secret. This is solely used for cookies.
- *
- * @param string $password The password
- * @param string $salt The salt
- * @return string The hashed password
- */
-function hash_salt($password, $salt)
-{
-	// Append the salt to get a user-specific authentication secret.
-	$secret_key = get_auth_secret() . $salt;
-
-	// Now use that to generate an HMAC of the password.
-	return hash_hmac('sha512', $password, $secret_key);
-}
-
-/**
- * Verifies a raw SMF password against the bcrypt'd string
- *
- * @param string $username The username
- * @param string $password The password
- * @param string $hash The hashed string
- * @return bool Whether the hashed password matches the string
- */
-function hash_verify_password($username, $password, $hash)
-{
-	global $sourcedir, $smcFunc;
-	if (!function_exists('password_verify'))
-		require_once($sourcedir . '/Subs-Password.php');
-
-	return password_verify($smcFunc['strtolower']($username) . $password, $hash);
-}
-
-/**
- * Returns the length for current hash
- *
- * @return int The length for the current hash
- */
-function hash_length()
-{
-	return 60;
-}
-
-/**
- * Benchmarks the server to figure out an appropriate cost factor (minimum 9)
- *
- * @param float $hashTime Time to target, in seconds
- * @return int The cost
- */
-function hash_benchmark($hashTime = 0.2)
-{
-	$cost = 9;
-	do
-	{
-		$timeStart = microtime(true);
-		hash_password('test', 'thisisatestpassword', $cost);
-		$timeTaken = microtime(true) - $timeStart;
-		$cost++;
-	}
-	while ($timeTaken < $hashTime);
-
-	return $cost;
-}
-
-// Based on code by "s rotondo90 at gmail com".
-// https://www.php.net/manual/en/function.hash-equals.php#119576
-if (!function_exists('hash_equals'))
-{
-	/**
-	 * A compatibility function for when PHP's "hash_equals" function isn't available
-	 * @param string $known_string A known hash
-	 * @param string $user_string The hash of the user string
-	 * @return bool Whether or not the two are equal
-	 */
-	function hash_equals($known_string, $user_string)
-	{
-		$ret = 0;
-
-		if (strlen($known_string) !== strlen($user_string))
-		{
-			$user_string = $known_string;
-			$ret = 1;
-		}
-
-		$res = $known_string ^ $user_string;
-
-		for ($i = strlen($res) - 1; $i >= 0; --$i)
-		{
-			$ret |= ord($res[$i]);
-		}
-
-		return !$ret;
-	}
 }
 
 ?>

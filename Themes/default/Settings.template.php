@@ -3,56 +3,31 @@
  * Simple Machines Forum (SMF)
  *
  * @package SMF
- * @author Simple Machines https://www.simplemachines.org
- * @copyright 2020 Simple Machines and individual contributors
- * @license https://www.simplemachines.org/about/smf/license.php BSD
+ * @author Simple Machines
+ * @copyright 2011 Simple Machines
+ * @license http://www.simplemachines.org/about/smf/license.php BSD
  *
- * @version 2.1 RC3
+ * @version 2.0
  */
 
-/**
- * This pseudo-template defines all the theme options
- */
 function template_options()
 {
-	global $context, $txt, $modSettings;
+	global $context, $settings, $options, $scripturl, $txt;
 
 	$context['theme_options'] = array(
-		$txt['theme_opt_display'],
+		array(
+			'id' => 'show_board_desc',
+			'label' => $txt['board_desc_inside'],
+			'default' => true,
+		),
 		array(
 			'id' => 'show_children',
 			'label' => $txt['show_children'],
 			'default' => true,
 		),
 		array(
-			'id' => 'topics_per_page',
-			'label' => $txt['topics_per_page'],
-			'options' => array(
-				0 => $txt['per_page_default'],
-				5 => 5,
-				10 => 10,
-				25 => 25,
-				50 => 50,
-			),
-			'default' => true,
-			'enabled' => empty($modSettings['disableCustomPerPage']),
-		),
-		array(
-			'id' => 'messages_per_page',
-			'label' => $txt['messages_per_page'],
-			'options' => array(
-				0 => $txt['per_page_default'],
-				5 => 5,
-				10 => 10,
-				25 => 25,
-				50 => 50,
-			),
-			'default' => true,
-			'enabled' => empty($modSettings['disableCustomPerPage']),
-		),
-		array(
-			'id' => 'view_newest_first',
-			'label' => $txt['recent_posts_at_top'],
+			'id' => 'use_sidebar_menu',
+			'label' => $txt['use_sidebar_menu'],
 			'default' => true,
 		),
 		array(
@@ -66,55 +41,23 @@ function template_options()
 			'default' => true,
 		),
 		array(
-			'id' => 'posts_apply_ignore_list',
-			'label' => $txt['posts_apply_ignore_list'],
-			'default' => false,
-			'enabled' => !empty($modSettings['enable_buddylist'])
+			'id' => 'show_no_censored',
+			'label' => $txt['show_no_censored'],
+			'default' => true,
 		),
-		$txt['theme_opt_posting'],
 		array(
 			'id' => 'return_to_post',
 			'label' => $txt['return_to_post'],
 			'default' => true,
 		),
 		array(
-			'id' => 'auto_notify',
-			'label' => $txt['auto_notify'],
+			'id' => 'no_new_reply_warning',
+			'label' => $txt['no_new_reply_warning'],
 			'default' => true,
 		),
 		array(
-			'id' => 'wysiwyg_default',
-			'label' => $txt['wysiwyg_default'],
-			'default' => false,
-			'enabled' => empty($modSettings['disable_wysiwyg']),
-		),
-		array(
-			'id' => 'drafts_autosave_enabled',
-			'label' => $txt['drafts_autosave_enabled'],
-			'default' => true,
-			'enabled' => !empty($modSettings['drafts_autosave_enabled']) && (!empty($modSettings['drafts_post_enabled']) || !empty($modSettings['drafts_pm_enabled'])),
-		),
-		array(
-			'id' => 'drafts_show_saved_enabled',
-			'label' => $txt['drafts_show_saved_enabled'],
-			'default' => true,
-			'enabled' => !empty($modSettings['drafts_show_saved_enabled']) && (!empty($modSettings['drafts_post_enabled']) || !empty($modSettings['drafts_pm_enabled'])),
-		),
-		$txt['theme_opt_moderation'],
-		array(
-			'id' => 'display_quick_mod',
-			'label' => $txt['display_quick_mod'],
-			'options' => array(
-				0 => $txt['display_quick_mod_none'],
-				1 => $txt['display_quick_mod_check'],
-				2 => $txt['display_quick_mod_image'],
-			),
-			'default' => true,
-		),
-		$txt['theme_opt_personal_messages'],
-		array(
-			'id' => 'popup_messages',
-			'label' => $txt['popup_messages'],
+			'id' => 'view_newest_first',
+			'label' => $txt['recent_posts_at_top'],
 			'default' => true,
 		),
 		array(
@@ -123,21 +66,58 @@ function template_options()
 			'default' => true,
 		),
 		array(
+			'id' => 'posts_apply_ignore_list',
+			'label' => $txt['posts_apply_ignore_list'],
+			'default' => false,
+		),
+		array(
+			'id' => 'wysiwyg_default',
+			'label' => $txt['wysiwyg_default'],
+			'default' => false,
+		),
+		array(
+			'id' => 'popup_messages',
+			'label' => $txt['popup_messages'],
+			'default' => true,
+		),
+		array(
+			'id' => 'copy_to_outbox',
+			'label' => $txt['copy_to_outbox'],
+			'default' => true,
+		),
+		array(
 			'id' => 'pm_remove_inbox_label',
 			'label' => $txt['pm_remove_inbox_label'],
 			'default' => true,
 		),
-		$txt['theme_opt_calendar'],
 		array(
-			'id' => 'calendar_default_view',
-			'label' => $txt['calendar_default_view'],
+			'id' => 'auto_notify',
+			'label' => $txt['auto_notify'],
+			'default' => true,
+		),
+		array(
+			'id' => 'topics_per_page',
+			'label' => $txt['topics_per_page'],
 			'options' => array(
-				'viewlist' => $txt['calendar_viewlist'],
-				'viewmonth' => $txt['calendar_viewmonth'],
-				'viewweek' => $txt['calendar_viewweek']
+				0 => $txt['per_page_default'],
+				5 => 5,
+				10 => 10,
+				25 => 25,
+				50 => 50,
 			),
 			'default' => true,
-			'enabled' => !empty($modSettings['cal_enabled']),
+		),
+		array(
+			'id' => 'messages_per_page',
+			'label' => $txt['messages_per_page'],
+			'options' => array(
+				0 => $txt['per_page_default'],
+				5 => 5,
+				10 => 10,
+				25 => 25,
+				50 => 50,
+			),
+			'default' => true,
 		),
 		array(
 			'id' => 'calendar_start_day',
@@ -148,17 +128,33 @@ function template_options()
 				6 => $txt['days'][6],
 			),
 			'default' => true,
-			'enabled' => !empty($modSettings['cal_enabled']),
+		),
+		array(
+			'id' => 'display_quick_reply',
+			'label' => $txt['display_quick_reply'],
+			'options' => array(
+				0 => $txt['display_quick_reply1'],
+				1 => $txt['display_quick_reply2'],
+				2 => $txt['display_quick_reply3']
+			),
+			'default' => true,
+		),
+		array(
+			'id' => 'display_quick_mod',
+			'label' => $txt['display_quick_mod'],
+			'options' => array(
+				0 => $txt['display_quick_mod_none'],
+				1 => $txt['display_quick_mod_check'],
+				2 => $txt['display_quick_mod_image'],
+			),
+			'default' => true,
 		),
 	);
 }
 
-/**
- * This pseudo-template defines all the available theme settings (but not their actual values)
- */
 function template_settings()
 {
-	global $context, $txt;
+	global $context, $settings, $options, $scripturl, $txt;
 
 	$context['theme_settings'] = array(
 		array(
@@ -174,23 +170,36 @@ function template_settings()
 			'type' => 'text',
 		),
 		array(
-			'id' => 'og_image',
-			'label' => $txt['og_image'],
-			'description' => $txt['og_image_desc'],
-			'type' => 'url',
-		),
-		'',
-		array(
 			'id' => 'smiley_sets_default',
 			'label' => $txt['smileys_default_set_for_theme'],
 			'options' => $context['smiley_sets'],
 			'type' => 'text',
 		),
-		'',
+		array(
+			'id' => 'forum_width',
+			'label' => $txt['forum_width'],
+			'description' => $txt['forum_width_desc'],
+			'type' => 'text',
+			'size' => 8,
+		),
+	'',
+		array(
+			'id' => 'linktree_link',
+			'label' => $txt['current_pos_text_img'],
+		),
+		array(
+			'id' => 'show_mark_read',
+			'label' => $txt['enable_mark_as_read'],
+		),
+		array(
+			'id' => 'allow_no_censored',
+			'label' => $txt['allow_no_censored'],
+		),
 		array(
 			'id' => 'enable_news',
 			'label' => $txt['enable_random_news'],
 		),
+	'',
 		array(
 			'id' => 'show_newsfader',
 			'label' => $txt['news_fader'],
@@ -200,11 +209,10 @@ function template_settings()
 			'label' => $txt['admin_fader_delay'],
 			'type' => 'number',
 		),
-		'',
 		array(
 			'id' => 'number_recent_posts',
 			'label' => $txt['number_recent_posts'],
-			'description' => $txt['zero_to_disable'],
+			'description' => $txt['number_recent_posts_desc'],
 			'type' => 'number',
 		),
 		array(
@@ -227,7 +235,42 @@ function template_settings()
 				1 => $txt['who_display_viewing_numbers'],
 				2 => $txt['who_display_viewing_names'],
 			),
-			'type' => 'list',
+			'type' => 'number',
+		),
+	'',
+		array(
+			'id' => 'show_modify',
+			'label' => $txt['last_modification'],
+		),
+		array(
+			'id' => 'show_profile_buttons',
+			'label' => $txt['show_view_profile_button'],
+		),
+		array(
+			'id' => 'show_user_images',
+			'label' => $txt['user_avatars'],
+		),
+		array(
+			'id' => 'show_blurb',
+			'label' => $txt['user_text'],
+		),
+		array(
+			'id' => 'show_gender',
+			'label' => $txt['gender_images'],
+		),
+		array(
+			'id' => 'hide_post_group',
+			'label' => $txt['hide_post_group'],
+			'description' => $txt['hide_post_group_desc'],
+		),
+	'',
+		array(
+			'id' => 'show_bbc',
+			'label' => $txt['admin_bbc'],
+		),
+		array(
+			'id' => 'additional_options_collapsable',
+			'label' => $txt['additional_options_collapsable'],
 		),
 	);
 }

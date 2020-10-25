@@ -1,41 +1,52 @@
 <?php
 
 /**
- * The main purpose of this file is to show a list of all errors that were
- * logged on the forum, and allow filtering and deleting them.
- *
  * Simple Machines Forum (SMF)
  *
  * @package SMF
- * @author Simple Machines https://www.simplemachines.org
- * @copyright 2020 Simple Machines and individual contributors
- * @license https://www.simplemachines.org/about/smf/license.php BSD
+ * @author Simple Machines http://www.simplemachines.org
+ * @copyright 2011 Simple Machines
+ * @license http://www.simplemachines.org/about/smf/license.php BSD
  *
- * @version 2.1 RC3
+ * @version 2.0.4
  */
 
 if (!defined('SMF'))
-	die('No direct access...');
+	die('Hacking attempt...');
 
-/**
- * View the forum's error log.
- * This function sets all the context up to show the error log for maintenance.
- * It requires the maintain_forum permission.
- * It is accessed from ?action=admin;area=logs;sa=errorlog.
- *
- * @uses template_error_log()
- */
+/* Show a list of all errors that were logged on the forum.
+
+	void ViewErrorLog()
+		- sets all the context up to show the error log for maintenance.
+		- uses the Errors template and error_log sub template.
+		- requires the maintain_forum permission.
+		- uses the 'view_errors' administration area.
+		- accessed from ?action=admin;area=logs;sa=errorlog.
+
+	void deleteErrors()
+		- deletes all or some of the errors in the error log.
+		- applies any necessary filters to deletion.
+		- should only be called by ViewErrorLog().
+		- attempts to TRUNCATE the table to reset the auto_increment.
+		- redirects back to the error log when done.
+
+	void ViewFile()
+		- will do php highlighting on the file specified in $_REQUEST['file']
+		- file must be readable
+		- full file path must be base64 encoded
+		- user must have admin_forum permission
+		- the line number number is specified by $_REQUEST['line']
+		- Will try to get the 20 lines before and after the specified line
+*/
+
+// View the forum's error log.
 function ViewErrorLog()
 {
-	global $scripturl, $txt, $context, $modSettings, $user_profile, $filter, $smcFunc;
+	global $scripturl, $txt, $context, $modSettings, $user_profile, $filter, $boarddir, $sourcedir, $themedir, $smcFunc;
 
 	// Viewing contents of a file?
 	if (isset($_GET['file']))
 		return ViewFile();
-
-	// Viewing contents of a backtrace?
-	if (isset($_GET['backtrace']))
-		return ViewBacktrace();
 
 	// Check for the administrative permission to do this.
 	isAllowedTo('admin_forum');
@@ -46,46 +57,14 @@ function ViewErrorLog()
 
 	// You can filter by any of the following columns:
 	$filters = array(
-		'id_member' => array(
-			'txt' => $txt['username'],
-			'operator' => '=',
-			'datatype' => 'int',
-		),
-		'ip' => array(
-			'txt' => $txt['ip_address'],
-			'operator' => '=',
-			'datatype' => 'inet',
-		),
-		'session' => array(
-			'txt' => $txt['session'],
-			'operator' => 'LIKE',
-			'datatype' => 'string',
-		),
-		'url' => array(
-			'txt' => $txt['error_url'],
-			'operator' => 'LIKE',
-			'datatype' => 'string',
-		),
-		'message' => array(
-			'txt' => $txt['error_message'],
-			'operator' => 'LIKE',
-			'datatype' => 'string',
-		),
-		'error_type' => array(
-			'txt' => $txt['error_type'],
-			'operator' => 'LIKE',
-			'datatype' => 'string',
-		),
-		'file' => array(
-			'txt' => $txt['file'],
-			'operator' => 'LIKE',
-			'datatype' => 'string',
-		),
-		'line' => array(
-			'txt' => $txt['line'],
-			'operator' => '=',
-			'datatype' => 'int',
-		),
+		'id_member' => $txt['username'],
+		'ip' => $txt['ip_address'],
+		'session' => $txt['session'],
+		'url' => $txt['error_url'],
+		'message' => $txt['error_message'],
+		'error_type' => $txt['error_type'],
+		'file' => $txt['file'],
+		'line' => $txt['line'],
 	);
 
 	// Set up the filtering...
@@ -96,7 +75,7 @@ function ViewErrorLog()
 				'sql' => in_array($_GET['filter'], array('message', 'url', 'file')) ? base64_decode(strtr($_GET['value'], array(' ' => '+'))) : $smcFunc['db_escape_wildcard_string']($_GET['value']),
 			),
 			'href' => ';filter=' . $_GET['filter'] . ';value=' . $_GET['value'],
-			'entity' => $filters[$_GET['filter']]['txt']
+			'entity' => $filters[$_GET['filter']]
 		);
 
 	// Deleting, are we?
@@ -107,7 +86,7 @@ function ViewErrorLog()
 	$result = $smcFunc['db_query']('', '
 		SELECT COUNT(*)
 		FROM {db_prefix}log_errors' . (isset($filter) ? '
-		WHERE ' . $filter['variable'] . ' ' . $filters[$_GET['filter']]['operator'] . ' {' . $filters[$_GET['filter']]['datatype'] . ':filter}' : ''),
+		WHERE ' . $filter['variable'] . ' LIKE {string:filter}' : ''),
 		array(
 			'filter' => isset($filter) ? $filter['value']['sql'] : '',
 		)
@@ -127,60 +106,41 @@ function ViewErrorLog()
 	$context['sort_direction'] = isset($_REQUEST['desc']) ? 'down' : 'up';
 
 	// Set the page listing up.
-	$context['page_index'] = constructPageIndex($scripturl . '?action=admin;area=logs;sa=errorlog' . ($context['sort_direction'] == 'down' ? ';desc' : '') . (isset($filter) ? $filter['href'] : ''), $_GET['start'], $num_errors, $modSettings['defaultMaxListItems']);
+	$context['page_index'] = constructPageIndex($scripturl . '?action=admin;area=logs;sa=errorlog' . ($context['sort_direction'] == 'down' ? ';desc' : '') . (isset($filter) ? $filter['href'] : ''), $_GET['start'], $num_errors, $modSettings['defaultMaxMessages']);
 	$context['start'] = $_GET['start'];
-
-	// Update the error count
-	if (!isset($filter))
-		$context['num_errors'] = $num_errors;
-	else
-	{
-		// We want all errors, not just the number of filtered messages...
-		$query = $smcFunc['db_query']('', '
-			SELECT COUNT(id_error)
-			FROM {db_prefix}log_errors',
-			array()
-		);
-
-		list($context['num_errors']) = $smcFunc['db_fetch_row']($query);
-		$smcFunc['db_free_result']($query);
-	}
 
 	// Find and sort out the errors.
 	$request = $smcFunc['db_query']('', '
 		SELECT id_error, id_member, ip, url, log_time, message, session, error_type, file, line
 		FROM {db_prefix}log_errors' . (isset($filter) ? '
-		WHERE ' . $filter['variable'] . ' ' . $filters[$_GET['filter']]['operator'] . ' {' . $filters[$_GET['filter']]['datatype'] . ':filter}' : '') . '
+		WHERE ' . $filter['variable'] . ' LIKE {string:filter}' : '') . '
 		ORDER BY id_error ' . ($context['sort_direction'] == 'down' ? 'DESC' : '') . '
-		LIMIT {int:start}, {int:max}',
+		LIMIT ' . $_GET['start'] . ', ' . $modSettings['defaultMaxMessages'],
 		array(
 			'filter' => isset($filter) ? $filter['value']['sql'] : '',
-			'start' => $_GET['start'],
-			'max' => $modSettings['defaultMaxListItems'],
 		)
 	);
 	$context['errors'] = array();
 	$members = array();
 
-	for ($i = 0; $row = $smcFunc['db_fetch_assoc']($request); $i++)
+	for ($i = 0; $row = $smcFunc['db_fetch_assoc']($request); $i ++)
 	{
 		$search_message = preg_replace('~&lt;span class=&quot;remove&quot;&gt;(.+?)&lt;/span&gt;~', '%', $smcFunc['db_escape_wildcard_string']($row['message']));
-
-		if (isset($filter) && $search_message == $filter['value']['sql'])
+		if ($search_message == $filter['value']['sql'])
 			$search_message = $smcFunc['db_escape_wildcard_string']($row['message']);
-
-		$show_message = strtr(strtr(preg_replace('~&lt;span class=&quot;remove&quot;&gt;(.+?)&lt;/span&gt;~', '$1', $row['message']), array("\r" => '', '<br>' => "\n", '<' => '&lt;', '>' => '&gt;', '"' => '&quot;')), array("\n" => '<br>'));
+		$show_message = strtr(strtr(preg_replace('~&lt;span class=&quot;remove&quot;&gt;(.+?)&lt;/span&gt;~', '$1', $row['message']), array("\r" => '', '<br />' => "\n", '<' => '&lt;', '>' => '&gt;', '"' => '&quot;')), array("\n" => '<br />'));
 
 		$context['errors'][$row['id_error']] = array(
+			'alternate' => $i %2 == 0,
 			'member' => array(
 				'id' => $row['id_member'],
-				'ip' => inet_dtop($row['ip']),
+				'ip' => $row['ip'],
 				'session' => $row['session']
 			),
 			'time' => timeformat($row['log_time']),
 			'timestamp' => $row['log_time'],
 			'url' => array(
-				'html' => $smcFunc['htmlspecialchars'](strpos($row['url'], 'cron.php') === false ? (substr($row['url'], 0, 1) == '?' ? $scripturl : '') . $row['url'] : $row['url']),
+				'html' => htmlspecialchars((substr($row['url'], 0, 1) == '?' ? $scripturl : '') . $row['url']),
 				'href' => base64_encode($smcFunc['db_escape_wildcard_string']($row['url']))
 			),
 			'message' => array(
@@ -190,7 +150,7 @@ function ViewErrorLog()
 			'id' => $row['id_error'],
 			'error_type' => array(
 				'type' => $row['error_type'],
-				'name' => isset($txt['errortype_' . $row['error_type']]) ? $txt['errortype_' . $row['error_type']] : $row['error_type'],
+				'name' => isset($txt['errortype_'.$row['error_type']]) ? $txt['errortype_'.$row['error_type']] : $row['error_type'],
 			),
 			'file' => array(),
 		);
@@ -203,7 +163,7 @@ function ViewErrorLog()
 				'file' => $row['file'],
 				'line' => $row['line'],
 				'href' => $scripturl . '?action=admin;area=logs;sa=errorlog;file=' . base64_encode($row['file']) . ';line=' . $row['line'],
-				'link' => $linkfile ? '<a href="' . $scripturl . '?action=admin;area=logs;sa=errorlog;file=' . base64_encode($row['file']) . ';line=' . $row['line'] . '" onclick="return reqWin(this.href, 600, 480, false);">' . $row['file'] . '</a>' : $row['file'],
+				'link' => $linkfile ? '<a href="' . $scripturl . '?action=admin;area=logs;sa=errorlog;file=' . base64_encode($row['file']) . ';line=' . $row['line'] . '" onclick="return reqWin(this.href, 600, 400, false);">' . $row['file'] . '</a>' : $row['file'],
 				'search' => base64_encode($row['file']),
 			);
 		}
@@ -221,10 +181,9 @@ function ViewErrorLog()
 			SELECT id_member, member_name, real_name
 			FROM {db_prefix}members
 			WHERE id_member IN ({array_int:member_list})
-			LIMIT {int:members}',
+			LIMIT ' . count($members),
 			array(
 				'member_list' => $members,
-				'members' => count($members),
 			)
 		);
 		while ($row = $smcFunc['db_fetch_assoc']($request))
@@ -262,15 +221,15 @@ function ViewErrorLog()
 			$context['filter']['value']['html'] = '<a href="' . $scripturl . '?action=profile;u=' . $id . '">' . $user_profile[$id]['real_name'] . '</a>';
 		}
 		elseif ($filter['variable'] == 'url')
-			$context['filter']['value']['html'] = '\'' . strtr($smcFunc['htmlspecialchars']((substr($filter['value']['sql'], 0, 1) == '?' ? $scripturl : '') . $filter['value']['sql']), array('\_' => '_')) . '\'';
+			$context['filter']['value']['html'] = '\'' . strtr(htmlspecialchars((substr($filter['value']['sql'], 0, 1) == '?' ? $scripturl : '') . $filter['value']['sql']), array('\_' => '_')) . '\'';
 		elseif ($filter['variable'] == 'message')
 		{
-			$context['filter']['value']['html'] = '\'' . strtr($smcFunc['htmlspecialchars']($filter['value']['sql']), array("\n" => '<br>', '&lt;br /&gt;' => '<br>', "\t" => '&nbsp;&nbsp;&nbsp;', '\_' => '_', '\\%' => '%', '\\\\' => '\\')) . '\'';
+			$context['filter']['value']['html'] = '\'' . strtr(htmlspecialchars($filter['value']['sql']), array("\n" => '<br />', '&lt;br /&gt;' => '<br />', "\t" => '&nbsp;&nbsp;&nbsp;', '\_' => '_', '\\%' => '%', '\\\\' => '\\')) . '\'';
 			$context['filter']['value']['html'] = preg_replace('~&amp;lt;span class=&amp;quot;remove&amp;quot;&amp;gt;(.+?)&amp;lt;/span&amp;gt;~', '$1', $context['filter']['value']['html']);
 		}
 		elseif ($filter['variable'] == 'error_type')
 		{
-			$context['filter']['value']['html'] = '\'' . strtr($smcFunc['htmlspecialchars']($filter['value']['sql']), array("\n" => '<br>', '&lt;br /&gt;' => '<br>', "\t" => '&nbsp;&nbsp;&nbsp;', '\_' => '_', '\\%' => '%', '\\\\' => '\\')) . '\'';
+			$context['filter']['value']['html'] = '\'' . strtr(htmlspecialchars($filter['value']['sql']), array("\n" => '<br />', '&lt;br /&gt;' => '<br />', "\t" => '&nbsp;&nbsp;&nbsp;', '\_' => '_', '\\%' => '%', '\\\\' => '\\')) . '\'';
 		}
 		else
 			$context['filter']['value']['html'] = &$filter['value']['sql'];
@@ -280,7 +239,6 @@ function ViewErrorLog()
 
 	$context['error_types']['all'] = array(
 		'label' => $txt['errortype_all'],
-		'error_type' => 'all',
 		'description' => isset($txt['errortype_all_desc']) ? $txt['errortype_all_desc'] : '',
 		'url' => $scripturl . '?action=admin;area=logs;sa=errorlog' . ($context['sort_direction'] == 'down' ? ';desc' : ''),
 		'is_selected' => empty($filter),
@@ -304,7 +262,6 @@ function ViewErrorLog()
 
 		$context['error_types'][$sum] = array(
 			'label' => (isset($txt['errortype_' . $row['error_type']]) ? $txt['errortype_' . $row['error_type']] : $row['error_type']) . ' (' . $row['num_errors'] . ')',
-			'error_type' => $row['error_type'],
 			'description' => isset($txt['errortype_' . $row['error_type'] . '_desc']) ? $txt['errortype_' . $row['error_type'] . '_desc'] : '',
 			'url' => $scripturl . '?action=admin;area=logs;sa=errorlog' . ($context['sort_direction'] == 'down' ? ';desc' : '') . ';filter=error_type;value=' . $row['error_type'],
 			'is_selected' => isset($filter) && $filter['value']['sql'] == $smcFunc['db_escape_wildcard_string']($row['error_type']),
@@ -322,27 +279,18 @@ function ViewErrorLog()
 		$context['error_types']['all']['is_last'] = true;
 
 	// And this is pretty basic ;).
-	$context['page_title'] = $txt['errorlog'];
+	$context['page_title'] = $txt['errlog'];
 	$context['has_filter'] = isset($filter);
 	$context['sub_template'] = 'error_log';
-
-	createToken('admin-el');
 }
 
-/**
- * Delete all or some of the errors in the error log.
- * It applies any necessary filters to deletion.
- * This should only be called by ViewErrorLog().
- * It attempts to TRUNCATE the table to reset the auto_increment.
- * Redirects back to the error log when done.
- */
+// Delete errors from the database.
 function deleteErrors()
 {
 	global $filter, $smcFunc;
 
 	// Make sure the session exists and is correct; otherwise, might be a hacker.
 	checkSession();
-	validateToken('admin-el');
 
 	// Delete all or just some?
 	if (isset($_POST['delall']) && !isset($filter))
@@ -353,18 +301,13 @@ function deleteErrors()
 		);
 	// Deleting all with a filter?
 	elseif (isset($_POST['delall']) && isset($filter))
-	{
-		// ip need a different placeholder type
-		$filter_type = $filter['variable'] == 'ip'? 'inet' : 'string';
-		$filter_op = $filter['variable'] == 'ip'? '=' : 'LIKE';
 		$smcFunc['db_query']('', '
 			DELETE FROM {db_prefix}log_errors
-			WHERE ' . $filter['variable'] . ' ' . $filter_op . ' {' . $filter_type . ':filter}',
+			WHERE ' . $filter['variable'] . ' LIKE {string:filter}',
 			array(
 				'filter' => $filter['value']['sql'],
 			)
 		);
-	}
 	// Just specific errors?
 	elseif (!empty($_POST['delete']))
 	{
@@ -384,19 +327,9 @@ function deleteErrors()
 	redirectexit('action=admin;area=logs;sa=errorlog' . (isset($_REQUEST['desc']) ? ';desc' : ''));
 }
 
-/**
- * View a file specified in $_REQUEST['file'], with php highlighting on it
- * Preconditions:
- *  - file must be readable,
- *  - full file path must be base64 encoded,
- *  - user must have admin_forum permission.
- * The line number number is specified by $_REQUEST['line']...
- * The function will try to get the 20 lines before and after the specified line.
- */
 function ViewFile()
 {
-	global $context, $boarddir, $sourcedir, $cachedir, $smcFunc;
-
+	global $context, $txt, $boarddir, $sourcedir, $cachedir;
 	// Check for the administrative permission to do this.
 	isAllowedTo('admin_forum');
 
@@ -411,7 +344,7 @@ function ViewFile()
 
 	// Make sure the file we are looking for is one they are allowed to look at
 	if ($ext != '.php' || (strpos($file, $real_board) === false && strpos($file, $real_source) === false) || ($basename == 'settings.php' || $basename == 'settings_bak.php') || strpos($file, $real_cache) !== false || !is_readable($file))
-		fatal_lang_error('error_bad_file', true, array($smcFunc['htmlspecialchars']($file)));
+		fatal_lang_error('error_bad_file', true, array(htmlspecialchars($file)));
 
 	// get the min and max lines
 	$min = $line - 20 <= 0 ? 1 : $line - 20;
@@ -420,12 +353,12 @@ function ViewFile()
 	if ($max <= 0 || $min >= $max)
 		fatal_lang_error('error_bad_line');
 
-	$file_data = explode('<br />', highlight_php_code($smcFunc['htmlspecialchars'](implode('', file($file)))));
+	$file_data = explode('<br />', highlight_php_code(htmlspecialchars(implode('', file($file)))));
 
 	// We don't want to slice off too many so lets make sure we stop at the last one
 	$max = min($max, max(array_keys($file_data)));
 
-	$file_data = array_slice($file_data, $min - 1, $max - $min);
+	$file_data = array_slice($file_data, $min-1, $max - $min);
 
 	$context['file_data'] = array(
 		'contents' => $file_data,
@@ -437,44 +370,6 @@ function ViewFile()
 	loadTemplate('Errors');
 	$context['template_layers'] = array();
 	$context['sub_template'] = 'show_file';
-
-}
-
-/**
- * View a backtrace specified in $_REQUEST['backtrace'], with php highlighting on it
- * Preconditions:
- *  - user must have admin_forum permission.
- */
-function ViewBacktrace()
-{
-	global $context, $smcFunc, $scripturl;
-
-	// Check for the administrative permission to do this.
-	isAllowedTo('admin_forum');
-
-	$id_error = (int) $_REQUEST['backtrace'];
-	$request = $smcFunc['db_query']('', '
-		SELECT backtrace, error_type, message, file, line, url
-		FROM {db_prefix}log_errors
-		WHERE id_error = {int:id_error}',
-		array(
-			'id_error' => $id_error,
-		)
-	);
-
-	while ($row = $smcFunc['db_fetch_assoc']($request))
-	{
-		$context['error_info'] = $row;
-		$context['error_info']['url'] = $scripturl . $row['url'];
-		$context['error_info']['backtrace'] = $smcFunc['json_decode']($row['backtrace']);
-	}
-	$smcFunc['db_free_result']($request);
-
-	loadCSSFile('admin.css', array(), 'smf_admin');
-	loadTemplate('Errors');
-	loadLanguage('ManageMaintenance');
-	$context['template_layers'] = array();
-	$context['sub_template'] = 'show_backtrace';
 
 }
 

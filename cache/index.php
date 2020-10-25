@@ -7,7 +7,7 @@ if (file_exists(dirname(dirname(__FILE__)) . '/Settings.php'))
 {
 	// Found it!
 	require(dirname(dirname(__FILE__)) . '/Settings.php');
-	header('location: ' . $boardurl);
+	header('Location: ' . $boardurl);
 }
 // Can't find it... just forget it.
 else

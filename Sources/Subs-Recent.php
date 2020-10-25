@@ -1,37 +1,34 @@
 <?php
 
 /**
- * This file contains a couple of functions for the latests posts on forum.
- *
  * Simple Machines Forum (SMF)
  *
  * @package SMF
- * @author Simple Machines https://www.simplemachines.org
- * @copyright 2020 Simple Machines and individual contributors
- * @license https://www.simplemachines.org/about/smf/license.php BSD
+ * @author Simple Machines http://www.simplemachines.org
+ * @copyright 2011 Simple Machines
+ * @license http://www.simplemachines.org/about/smf/license.php BSD
  *
- * @version 2.1 RC3
+ * @version 2.0
  */
 
 if (!defined('SMF'))
-	die('No direct access...');
+	die('Hacking attempt...');
 
-/**
- * Get the latest posts of a forum.
- *
- * @param array $latestPostOptions
- * @return array
- */
+/*	!!!
+
+*/
+
+// Get the latest posts of a forum.
 function getLastPosts($latestPostOptions)
 {
-	global $scripturl, $modSettings, $smcFunc, $sourcedir;
+	global $scripturl, $txt, $user_info, $modSettings, $smcFunc, $context;
 
-	// Find all the posts.  Newer ones will have higher IDs.  (assuming the last 20 * number are accessible...)
-	// @todo SLOW This query is now slow, NEEDS to be fixed.  Maybe break into two?
+	// Find all the posts.  Newer ones will have higher IDs.  (assuming the last 20 * number are accessable...)
+	// !!!SLOW This query is now slow, NEEDS to be fixed.  Maybe break into two?
 	$request = $smcFunc['db_query']('substring', '
 		SELECT
 			m.poster_time, m.subject, m.id_topic, m.id_member, m.id_msg,
-			COALESCE(mem.real_name, m.poster_name) AS poster_name, t.id_board, b.name AS board_name,
+			IFNULL(mem.real_name, m.poster_name) AS poster_name, t.id_board, b.name AS board_name,
 			SUBSTRING(m.body, 1, 385) AS body, m.smileys_enabled
 		FROM {db_prefix}messages AS m
 			INNER JOIN {db_prefix}topics AS t ON (t.id_topic = m.id_topic)
@@ -51,27 +48,14 @@ function getLastPosts($latestPostOptions)
 			'is_approved' => 1,
 		)
 	);
-	$rows = $smcFunc['db_fetch_all']($request);
-
-	// If the ability to embed attachments in posts is enabled, load the attachments now for efficiency
-	if (!empty($modSettings['attachmentEnable']) && (empty($modSettings['disabledBBC']) || !in_array('attach', explode(',', strtolower($modSettings['disabledBBC'])))))
-	{
-		$msgIDs = array();
-		foreach ($rows as $row)
-			$msgIDs[] = $row['id_msg'];
-
-		require_once($sourcedir . '/Subs-Attachments.php');
-		prepareAttachsByMsg($msgIDs);
-	}
-
 	$posts = array();
-	foreach ($rows as $row)
+	while ($row = $smcFunc['db_fetch_assoc']($request))
 	{
 		// Censor the subject and post for the preview ;).
 		censorText($row['subject']);
 		censorText($row['body']);
 
-		$row['body'] = strip_tags(strtr(parse_bbc($row['body'], $row['smileys_enabled'], $row['id_msg']), array('<br>' => '&#10;')));
+		$row['body'] = strip_tags(strtr(parse_bbc($row['body'], $row['smileys_enabled'], $row['id_msg']), array('<br />' => '&#10;')));
 		if ($smcFunc['strlen']($row['body']) > 128)
 			$row['body'] = $smcFunc['substr']($row['body'], 0, 128) . '...';
 
@@ -105,11 +89,7 @@ function getLastPosts($latestPostOptions)
 	return $posts;
 }
 
-/**
- * Callback-function for the cache for getLastPosts().
- *
- * @param array $latestPostOptions
- */
+// Callback-function for the cache for getLastPosts().
 function cache_getLastPosts($latestPostOptions)
 {
 	return array(

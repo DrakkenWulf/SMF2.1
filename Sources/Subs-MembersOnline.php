@@ -1,37 +1,38 @@
 <?php
 
 /**
- * Handle online users
- *
  * Simple Machines Forum (SMF)
  *
  * @package SMF
- * @author Simple Machines https://www.simplemachines.org
- * @copyright 2020 Simple Machines and individual contributors
- * @license https://www.simplemachines.org/about/smf/license.php BSD
+ * @author Simple Machines http://www.simplemachines.org
+ * @copyright 2011 Simple Machines
+ * @license http://www.simplemachines.org/about/smf/license.php BSD
  *
- * @version 2.1 RC3
+ * @version 2.0.12
  */
 
 if (!defined('SMF'))
-	die('No direct access...');
+	die('Hacking attempt...');
 
-/**
- * Retrieve a list and several other statistics of the users currently online.
- * Used by the board index and SSI.
- * Also returns the membergroups of the users that are currently online.
- * (optionally) hides members that chose to hide their online presence.
- *
- * @param array $membersOnlineOptions An array of options for the list
- * @return array An array of information about the online users
- */
+/*	This file currently only holds the function for showing a list of online
+	users used by the board index and SSI. In the future it'll also contain
+	functions used by the Who's online page.
+
+	array getMembersOnlineStats(array membersOnlineOptions)
+		- retrieve a list and several other statistics of the users currently
+		  online on the forum.
+		- used by the board index and SSI.
+		- also returns the membergroups of the users that are currently online.
+		- (optionally) hides members that chose to hide their online presense.
+*/
+
+// Retrieve a list and several other statistics of the users currently online.
 function getMembersOnlineStats($membersOnlineOptions)
 {
-	global $smcFunc, $scripturl, $user_info, $modSettings, $txt;
+	global $smcFunc, $context, $scripturl, $user_info, $modSettings, $txt;
 
 	// The list can be sorted in several ways.
 	$allowed_sort_options = array(
-		'', // No sorting.
 		'log_time',
 		'real_name',
 		'show_online',
@@ -65,13 +66,13 @@ function getMembersOnlineStats($membersOnlineOptions)
 	$spiders = array();
 	$spider_finds = array();
 	if (!empty($modSettings['show_spider_online']) && ($modSettings['show_spider_online'] < 3 || allowedTo('admin_forum')) && !empty($modSettings['spider_name_cache']))
-		$spiders = $smcFunc['json_decode']($modSettings['spider_name_cache'], true);
+		$spiders = safe_unserialize($modSettings['spider_name_cache']);
 
 	// Load the users online right now.
 	$request = $smcFunc['db_query']('', '
 		SELECT
 			lo.id_member, lo.log_time, lo.id_spider, mem.real_name, mem.member_name, mem.show_online,
-			mg.online_color, mg.id_group, mg.group_name, mg.hidden, mg.group_type, mg.id_parent
+			mg.online_color, mg.id_group, mg.group_name
 		FROM {db_prefix}log_online AS lo
 			LEFT JOIN {db_prefix}members AS mem ON (mem.id_member = lo.id_member)
 			LEFT JOIN {db_prefix}membergroups AS mg ON (mg.id_group = CASE WHEN mem.id_group = {int:reg_mem_group} THEN mem.id_post_group ELSE mem.id_group END)',
@@ -117,7 +118,7 @@ function getMembersOnlineStats($membersOnlineOptions)
 		}
 
 		// A lot of useful information for each member.
-		$membersOnlineStats['users_online'][$row[$membersOnlineOptions['sort']] . '_' . $row['member_name']] = array(
+		$membersOnlineStats['users_online'][$row[$membersOnlineOptions['sort']] . $row['member_name']] = array(
 			'id' => $row['id_member'],
 			'username' => $row['member_name'],
 			'name' => $row['real_name'],
@@ -130,29 +131,25 @@ function getMembersOnlineStats($membersOnlineOptions)
 		);
 
 		// This is the compact version, simply implode it to show.
-		$membersOnlineStats['list_users_online'][$row[$membersOnlineOptions['sort']] . '_' . $row['member_name']] = empty($row['show_online']) ? '<em>' . $link . '</em>' : $link;
+		$membersOnlineStats['list_users_online'][$row[$membersOnlineOptions['sort']] . $row['member_name']] = empty($row['show_online']) ? '<em>' . $link . '</em>' : $link;
 
 		// Store all distinct (primary) membergroups that are shown.
 		if (!isset($membersOnlineStats['online_groups'][$row['id_group']]))
 			$membersOnlineStats['online_groups'][$row['id_group']] = array(
 				'id' => $row['id_group'],
 				'name' => $row['group_name'],
-				'color' => $row['online_color'],
-				'hidden' => $row['hidden'],
-				'type' => $row['group_type'],
-				'parent' => $row['id_parent'],
+				'color' => $row['online_color']
 			);
 	}
 	$smcFunc['db_free_result']($request);
 
 	// If there are spiders only and we're showing the detail, add them to the online list - at the bottom.
 	if (!empty($spider_finds) && $modSettings['show_spider_online'] > 1)
-	{
-		$sort = $membersOnlineOptions['sort'] === 'log_time' && $membersOnlineOptions['reverse_sort'] ? 0 : 'zzz_';
 		foreach ($spider_finds as $id => $count)
 		{
 			$link = $spiders[$id] . ($count > 1 ? ' (' . $count . ')' : '');
-			$membersOnlineStats['users_online'][$sort . '_' . $spiders[$id]] = array(
+			$sort = $membersOnlineOptions['sort'] = 'log_time' && $membersOnlineOptions['reverse_sort'] ? 0 : 'zzz_';
+			$membersOnlineStats['users_online'][$sort . $spiders[$id]] = array(
 				'id' => 0,
 				'username' => $spiders[$id],
 				'name' => $link,
@@ -163,9 +160,8 @@ function getMembersOnlineStats($membersOnlineOptions)
 				'hidden' => false,
 				'is_last' => false,
 			);
-			$membersOnlineStats['list_users_online'][$sort . '_' . $spiders[$id]] = $link;
+			$membersOnlineStats['list_users_online'][$sort . $spiders[$id]] = $link;
 		}
-	}
 
 	// Time to sort the list a bit.
 	if (!empty($membersOnlineStats['users_online']))
@@ -191,11 +187,7 @@ function getMembersOnlineStats($membersOnlineOptions)
 	return $membersOnlineStats;
 }
 
-/**
- * Check if the number of users online is a record and store it.
- *
- * @param int $total_users_online The total number of members online
- */
+// Check if the number of users online is a record and store it.
 function trackStatsUsersOnline($total_users_online)
 {
 	global $modSettings, $smcFunc;

@@ -6,36 +6,14 @@
  * Simple Machines Forum (SMF)
  *
  * @package SMF
- * @author Simple Machines https://www.simplemachines.org
- * @copyright 2020 Simple Machines and individual contributors
- * @license https://www.simplemachines.org/about/smf/license.php BSD
+ * @author Simple Machines http://www.simplemachines.org
+ * @copyright 2016 Simple Machines and individual contributors
+ * @license http://www.simplemachines.org/about/smf/license.php BSD
  *
- * @version 2.1 RC3
+ * @version 2.0.16
  */
 
-if (!defined('SMF'))
-	define('SMF', 'PROXY');
-
-if (!defined('SMF_VERSION'))
-	define('SMF_VERSION', '2.1 RC3');
-
-if (!defined('SMF_FULL_VERSION'))
-	define('SMF_FULL_VERSION', 'SMF ' . SMF_VERSION);
-
-if (!defined('SMF_SOFTWARE_YEAR'))
-	define('SMF_SOFTWARE_YEAR', '2020');
-
-if (!defined('JQUERY_VERSION'))
-	define('JQUERY_VERSION', '3.5.1');
-
-if (!defined('POSTGRE_TITLE'))
-	define('POSTGRE_TITLE', 'PostgreSQL');
-
-if (!defined('MYSQL_TITLE'))
-	define('MYSQL_TITLE', 'MySQL');
-
-if (!defined('SMF_USER_AGENT'))
-	define('SMF_USER_AGENT', 'Mozilla/5.0 (' . php_uname('s') . ' ' . php_uname('m') . ') AppleWebKit/605.1.15 (KHTML, like Gecko)  SMF/' . strtr(SMF_VERSION, ' ', '.'));
+define('SMF', 'proxy');
 
 /**
  * Class ProxyServer
@@ -54,20 +32,6 @@ class ProxyServer
 	/** @var string The cache directory */
 	protected $cache;
 
-	/** @var int $maxDays until entries get deleted */
-	protected $maxDays;
-
-	/** @var int $cachedtime time object cached */
-	protected $cachedtime;
-
-	/** @var string $cachedtype type of object cached */
-	protected $cachedtype;
-
-	/** @var int $cachedsize size of object cached */
-	protected $cachedsize;
-
-	/** @var string $cachedbody body of object cached */
-	protected $cachedbody;
 
 	/**
 	 * Constructor, loads up the Settings for the proxy
@@ -79,19 +43,7 @@ class ProxyServer
 		global $image_proxy_enabled, $image_proxy_maxsize, $image_proxy_secret, $cachedir, $sourcedir;
 
 		require_once(dirname(__FILE__) . '/Settings.php');
-		require_once($sourcedir . '/Subs.php');
-
-		// Make absolutely sure the cache directory is defined and writable.
-		if (empty($cachedir) || !is_dir($cachedir) || !is_writable($cachedir))
-		{
-			if (is_dir($boarddir . '/cache') && is_writable($boarddir . '/cache'))
-				$cachedir = $boarddir . '/cache';
-			else
-			{
-				$cachedir = sys_get_temp_dir() . '/smf_cache_' . md5($boarddir);
-				@mkdir($cachedir, 0750);
-			}
-		}
+		require_once($sourcedir . '/Class-CurlFetchWeb.php');
 
 		// Turn off all error reporting; any extra junk makes for an invalid image.
 		error_reporting(0);
@@ -100,7 +52,6 @@ class ProxyServer
 		$this->maxSize = (int) $image_proxy_maxsize;
 		$this->secret = (string) $image_proxy_secret;
 		$this->cache = $cachedir . '/images';
-		$this->maxDays = 5;
 	}
 
 	/**
@@ -116,14 +67,12 @@ class ProxyServer
 
 		// Try to create the image cache directory if it doesn't exist
 		if (!file_exists($this->cache))
+		{
 			if (!mkdir($this->cache) || !copy(dirname($this->cache) . '/index.php', $this->cache . '/index.php'))
 				return false;
+		}
 
-		// Basic sanity check
-		$_GET['request'] = validate_iri($_GET['request']);
-
-		// We aren't going anywhere without these
-		if (empty($_GET['hash']) || empty($_GET['request']))
+		if (empty($_GET['hash']) || empty($_GET['request']) || ($_GET['request'] === 'http:') || ($_GET['request'] === 'https:'))
 			return false;
 
 		$hash = $_GET['hash'];
@@ -132,82 +81,76 @@ class ProxyServer
 		if (hash_hmac('sha1', $request, $this->secret) != $hash)
 			return false;
 
-		// Ensure any non-ASCII characters in the URL are encoded correctly
-		$request = iri_to_url($request);
-
 		// Attempt to cache the request if it doesn't exist
 		if (!$this->isCached($request))
 			return $this->cacheImage($request);
 
-		return false;
+		return true;
 	}
+
 
 	/**
 	 * Serves the request
 	 *
 	 * @access public
+	 * @return void
 	 */
 	public function serve()
 	{
 		$request = $_GET['request'];
+		$cached_file = $this->getCachedPath($request);
+		$cached = json_decode(file_get_contents($cached_file), true);
+
 		// Did we get an error when trying to fetch the image
 		$response = $this->checkRequest();
-		if (!$response)
+		if ($response === null)
 		{
 			// Throw a 404
-			send_http_status(404);
+			header('HTTP/1.1 404 Not Found');
 			exit;
 		}
+		// Right, image not cached? Simply redirect, then.
+		if ($response === false)
+			header('Location: ' . $request, false, 301);
 
-		// We should have a cached image at this point
-		$cached_file = $this->getCachedPath($request);
-
-		// Read from cache if you need to...
-		if ($this->cachedbody === null)
-		{
-			$cached = json_decode(file_get_contents($cached_file), true);
-			$this->cachedtime = $cached['time'];
-			$this->cachedtype = $cached['content_type'];
-			$this->cachedsize = $cached['size'];
-			$this->cachedbody = $cached['body'];
-		}
-
-		$time = time();
-
-		// Is the cache expired? Delete and reload.
-		if ($time - $this->cachedtime > ($this->maxDays * 86400))
+		// Is the cache expired? Try to refresh it.
+		if (!$cached || time() - $cached['time'] > (5 * 86400))
 		{
 			@unlink($cached_file);
 			if ($this->checkRequest())
 				$this->serve();
-			$this->redirectexit($request);
-		}
-
-		$eTag = '"' . substr(sha1($request) . $this->cachedtime, 0, 64) . '"';
-		if (!empty($_SERVER['HTTP_IF_NONE_MATCH']) && strpos($_SERVER['HTTP_IF_NONE_MATCH'], $eTag) !== false)
-		{
-			send_http_status(304);
 			exit;
 		}
 
 		// Make sure we're serving an image
-		$contentParts = explode('/', !empty($this->cachedtype) ? $this->cachedtype : '');
+		$contentParts = explode('/', !empty($cached['content_type']) ? $cached['content_type'] : '');
 		if ($contentParts[0] != 'image')
 			exit;
 
-		$max_age = $time - $this->cachedtime + (5 * 86400);
-		header('content-type: ' . $this->cachedtype);
-		header('content-length: ' . $this->cachedsize);
-		header('cache-control: public, max-age=' . $max_age);
-		header('last-modified: ' . gmdate('D, d M Y H:i:s', $this->cachedtime) . ' GMT');
-		header('etag: ' . $eTag);
-		echo base64_decode($this->cachedbody);
+		// Check whether the ETag was sent back, and cache based on that...
+		$eTag = '"' . substr(sha1($request) . $cached['time'], 0, 64) . '"';
+		if (!empty($_SERVER['HTTP_IF_NONE_MATCH']) && strpos($_SERVER['HTTP_IF_NONE_MATCH'], $eTag) !== false)
+		{
+			header('HTTP/1.1 304 Not Modified');
+			exit;
+		}
+
+		header('Content-type: ' . $cached['content_type']);
+		header('Content-length: ' . $cached['size']);
+
+		// Add some caching
+		header('Cache-control: public');
+		header('Expires: ' . gmdate('D, d M Y H:i:s', time() + 525600 * 60) . ' GMT');
+		header('Last-Modified: ' . gmdate('D, d M Y H:i:s', filemtime($cached_file)) . ' GMT');
+		header('ETag: ' . $eTag);
+
+		echo base64_decode($cached['body']);
 	}
 
 	/**
 	 * Returns the request's hashed filepath
 	 *
-	 * @access public
+	 * @access protected
 	 * @param string $request The request to get the path for
 	 * @return string The hashed filepath for the specified request
 	 */
@@ -231,95 +174,42 @@ class ProxyServer
 	/**
 	 * Attempts to cache the image while validating it
 	 *
-	 * Redirects to the origin if
-	 *    - the image couldn't be fetched
-	 *    - the MIME type doesn't indicate an image
-	 *    - the image is too large
-	 *
 	 * @access protected
 	 * @param string $request The image to cache/validate
-	 * @return bool Whether the specified image was cached
+	 * @return bool|null Whether the specified image was cached; null if not found or not an image.
 	 */
 	protected function cacheImage($request)
 	{
 		$dest = $this->getCachedPath($request);
-		$ext = strtolower(pathinfo(parse_url($request, PHP_URL_PATH), PATHINFO_EXTENSION));
+		$curl = new curl_fetch_web_data(array(CURLOPT_BINARYTRANSFER => 1));
+		$request = $curl->get_url_data($request);
+		$responseCode = $request->result('code');
+		$response = $request->result();
 
-		$image = fetch_web_data($request);
+		if (empty($response) || $responseCode != 200)
+			return null;
 
-		// Looks like nobody was home
-		if (empty($image))
-			$this->redirectexit($request);
-
-		// What kind of file did they give us?
-		$finfo = finfo_open(FILEINFO_MIME_TYPE);
-		$mime_type = finfo_buffer($finfo, $image);
-
-		// SVG needs a little extra care
-		if ($ext == 'svg' && in_array($mime_type, array('text/plain', 'text/xml')) && strpos($image, '<svg') !== false && strpos($image, '</svg>') !== false)
-			$mime_type = 'image/svg+xml';
+		$headers = $response['headers'];
 
 		// Make sure the url is returning an image
-		if (strpos($mime_type, 'image/') !== 0)
-			$this->redirectexit($request);
+		$contentParts = explode('/', !empty($headers['content-type']) ? $headers['content-type'] : '');
+		if ($contentParts[0] != 'image')
+			return null;
 
 		// Validate the filesize
-		$size = strlen($image);
-		if ($size > ($this->maxSize * 1024))
-			$this->redirectexit($request);
+		if ($response['size'] > ($this->maxSize * 1024))
+			return false;
 
-		// Populate object for current serve execution (so you don't have to read it again...)
-		$this->cachedtime = time();
-		$this->cachedtype = $mime_type;
-		$this->cachedsize = $size;
-		$this->cachedbody = base64_encode($image);
-
-		// Cache it for later
 		return file_put_contents($dest, json_encode(array(
-			'content_type' => $this->cachedtype,
-			'size' => $this->cachedsize,
-			'time' => $this->cachedtime,
-			'body' => $this->cachedbody,
+			'content_type' => $headers['content-type'],
+			'size' => $response['size'],
+			'time' => time(),
+			'body' => base64_encode($response['body']),
 		))) !== false;
 	}
-
-	/**
-	 * A helper function to redirect a request
-	 *
-	 * @access private
-	 * @param string $request
-	 */
-	private function redirectexit($request)
-	{
-		header('Location: ' . un_htmlspecialchars($request), false, 301);
-		exit;
-	}
-
-	/**
-	 * Delete all old entries
-	 *
-	 * @access public
-	 */
-	public function housekeeping()
-	{
-		$path = $this->cache . '/';
-		if ($handle = opendir($path))
-		{
-			while (false !== ($file = readdir($handle)))
-			{
-				if (is_file($path . $file) && !in_array($file, array('index.php', '.htaccess')) && time() - filemtime($path . $file) > $this->maxDays * 86400)
-					unlink($path . $file);
-			}
-
-			closedir($handle);
-		}
-	}
 }
 
-if (SMF == 'PROXY')
-{
-	$proxy = new ProxyServer();
-	$proxy->serve();
-}
+$proxy = new ProxyServer();
+$proxy->serve();
 
 ?>

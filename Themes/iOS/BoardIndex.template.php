@@ -6,13 +6,6 @@
 * License: http://www.opensource.org/licenses/mit-license.php
 */
 
-/**
- * The top part of the outer layer of the boardindex
- */
-function template_boardindex_outer_above()
-{
-}
-
 
 function template_main() {
   global $context, $settings, $options, $txt, $scripturl, $modSettings;
@@ -53,14 +46,6 @@ function template_main() {
     echo '
       </div>';
   }
-}
-
-/**
- * The lower part of the outer layer of the board index
- */
-function template_boardindex_outer_below()
-{
-	#template_info_center();
 }
 
 ?>

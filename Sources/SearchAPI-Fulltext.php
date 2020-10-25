@@ -4,43 +4,44 @@
  * Simple Machines Forum (SMF)
  *
  * @package SMF
- * @author Simple Machines https://www.simplemachines.org
- * @copyright 2020 Simple Machines and individual contributors
- * @license https://www.simplemachines.org/about/smf/license.php BSD
+ * @author Simple Machines http://www.simplemachines.org
+ * @copyright 2011 Simple Machines
+ * @license http://www.simplemachines.org/about/smf/license.php BSD
  *
- * @version 2.1 RC3
+ * @version 2.0.16
  */
 
 if (!defined('SMF'))
-	die('No direct access...');
+	die('Hacking attempt...');
 
-/**
- * Class fulltext_search
- * Used for fulltext index searching
- */
-class fulltext_search extends search_api
+/*
+	int searchSort(string $wordA, string $wordB)
+		- callback function for usort used to sort the fulltext results.
+		- the order of sorting is: large words, small words, large words that
+		  are excluded from the search, small words that are excluded.
+*/
+
+class fulltext_search
 {
-	/**
-	 * @var array Which words are banned
-	 */
+	// This is the last version of SMF that this was tested on, to protect against API changes.
+	public $version_compatible = 'SMF 2.0';
+	// This won't work with versions of SMF less than this.
+	public $min_smf_version = 'SMF 2.0 Beta 2';
+	// Is it supported?
+	public $is_supported = true;
+
+	// Can we do a boolean search - tested on construct.
+	protected $canDoBooleanSearch = false;
+	// What words are banned?
 	protected $bannedWords = array();
-
-	/**
-	 * @var int The minimum word length
-	 */
+	// What is the minimum word length?
 	protected $min_word_length = 4;
+	// What databases support the fulltext index?
+	protected $supported_databases = array('mysql');
 
-	/**
-	 * @var array Which databases support this method?
-	 */
-	protected $supported_databases = array('mysql', 'postgresql');
-
-	/**
-	 * The constructor function
-	 */
 	public function __construct()
 	{
-		global $modSettings, $db_type;
+		global $smcFunc, $db_connection, $modSettings, $db_type;
 
 		// Is this database supported?
 		if (!in_array($db_type, $this->supported_databases))
@@ -49,50 +50,35 @@ class fulltext_search extends search_api
 			return;
 		}
 
+		// Some MySQL versions are superior to others :P.
+		$this->canDoBooleanSearch = version_compare($smcFunc['db_server_info']($db_connection), '4.0.1', '>=');
+
 		$this->bannedWords = empty($modSettings['search_banned_words']) ? array() : explode(',', $modSettings['search_banned_words']);
 		$this->min_word_length = $this->_getMinWordLength();
 	}
 
-	/**
-	 * {@inheritDoc}
-	 */
+	// Check whether the method can be performed by this API.
 	public function supportsMethod($methodName, $query_params = null)
 	{
-		$return = false;
 		switch ($methodName)
 		{
 			case 'searchSort':
 			case 'prepareIndexes':
 			case 'indexedWordQuery':
-				$return = true;
-				break;
+				return true;
+			break;
 
-			// All other methods, too bad dunno you.
 			default:
-				$return = false;
-				break;
+				return false;
+			break;
 		}
-
-		// Maybe parent got support
-		if (!$return)
-			$return = parent::supportsMethod($methodName, $query_params);
-
-		return $return;
 	}
 
-	/**
-	 * fulltext_search::_getMinWordLength()
-	 *
-	 * What is the minimum word length full text supports?
-	 *
-	 * @return int The minimum word length
-	 */
+	// What is the minimum word length full text supports?
 	protected function _getMinWordLength()
 	{
-		global $smcFunc, $db_type;
+		global $smcFunc;
 
-		if ($db_type == 'postgresql')
-			return 0;
 		// Try to determine the minimum number of letters for a fulltext search.
 		$request = $smcFunc['db_search_query']('max_fulltext_length', '
 			SHOW VARIABLES
@@ -113,59 +99,59 @@ class fulltext_search extends search_api
 		return $min_word_length;
 	}
 
-	/**
-	 * {@inheritDoc}
-	 */
+	// This function compares the length of two strings plus a little.
 	public function searchSort($a, $b)
 	{
-		global $excludedWords, $smcFunc;
+		global $modSettings, $excludedWords;
 
-		$x = $smcFunc['strlen']($a) - (in_array($a, $excludedWords) ? 1000 : 0);
-		$y = $smcFunc['strlen']($b) - (in_array($b, $excludedWords) ? 1000 : 0);
+		$x = strlen($a) - (in_array($a, $excludedWords) ? 1000 : 0);
+		$y = strlen($b) - (in_array($b, $excludedWords) ? 1000 : 0);
 
 		return $x < $y ? 1 : ($x > $y ? -1 : 0);
 	}
 
-	/**
-	 * {@inheritDoc}
-	 */
-	public function prepareIndexes($word, array &$wordsSearch, array &$wordsExclude, $isExcluded)
+	// Do we have to do some work with the words we are searching for to prepare them?
+	public function prepareIndexes($word, &$wordsSearch, &$wordsExclude, $isExcluded)
 	{
 		global $modSettings, $smcFunc;
 
 		$subwords = text2words($word, null, false);
 
-		if (empty($modSettings['search_force_index']))
-		{
-			// A boolean capable search engine and not forced to only use an index, we may use a non indexed search
-			// this is harder on the server so we are restrictive here
-			if (count($subwords) > 1 && preg_match('~[.:@$]~', $word))
-			{
-				// using special characters that a full index would ignore and the remaining words are short which would also be ignored
-				if (($smcFunc['strlen'](current($subwords)) < $this->min_word_length) && ($smcFunc['strlen'](next($subwords)) < $this->min_word_length))
-				{
-					$wordsSearch['words'][] = trim($word, "/*- ");
-					$wordsSearch['complex_words'][] = count($subwords) === 1 ? $word : '"' . $word . '"';
-				}
-			}
-			elseif ($smcFunc['strlen'](trim($word, "/*- ")) < $this->min_word_length)
-			{
-				// short words have feelings too
-				$wordsSearch['words'][] = trim($word, "/*- ");
-				$wordsSearch['complex_words'][] = count($subwords) === 1 ? $word : '"' . $word . '"';
-			}
-		}
+		if (!$this->canDoBooleanSearch && count($subwords) > 1 && empty($modSettings['search_force_index']))
+			$wordsSearch['words'][] = $word;
 
-		$fulltextWord = count($subwords) === 1 ? $word : '"' . $word . '"';
-		$wordsSearch['indexed_words'][] = $fulltextWord;
-		if ($isExcluded)
-			$wordsExclude[] = $fulltextWord;
+		if ($this->canDoBooleanSearch)
+		{
+			$fulltextWord = count($subwords) === 1 ? $word : '"' . $word . '"';
+			$wordsSearch['indexed_words'][] = $fulltextWord;
+			if ($isExcluded)
+				$wordsExclude[] = $fulltextWord;
+		}
+		// Excluded phrases don't benefit from being split into subwords.
+		elseif (count($subwords) > 1 && $isExcluded)
+			return;
+		else
+		{
+			$relyOnIndex = true;
+			foreach ($subwords as $subword)
+			{
+				if (($smcFunc['strlen']($subword) >= $this->min_word_length) && !in_array($subword, $this->bannedWords))
+				{
+					$wordsSearch['indexed_words'][] = $subword;
+					if ($isExcluded)
+						$wordsExclude[] = $subword;
+				}
+				elseif (!in_array($subword, $this->bannedWords))
+					$relyOnIndex = false;
+			}
+
+			if ($this->canDoBooleanSearch && !$relyOnIndex && empty($modSettings['search_force_index']))
+				$wordsSearch['words'][] = $word;
+		}
 	}
 
-	/**
-	 * {@inheritDoc}
-	 */
-	public function indexedWordQuery(array $words, array $search_data)
+	// Search for indexed words.
+	public function indexedWordQuery($words, $search_data)
 	{
 		global $modSettings, $smcFunc;
 
@@ -175,9 +161,6 @@ class fulltext_search extends search_api
 		$query_where = array();
 		$query_params = $search_data['params'];
 
-		if ($smcFunc['db_title'] === POSTGRE_TITLE)
-			$modSettings['search_simple_fulltext'] = true;
-
 		if ($query_params['id_search'])
 			$query_select['id_search'] = '{int:id_search}';
 
@@ -185,7 +168,7 @@ class fulltext_search extends search_api
 		if (empty($modSettings['search_simple_fulltext']))
 			foreach ($words['words'] as $regularWord)
 			{
-				$query_where[] = 'm.body' . (in_array($regularWord, $query_params['excluded_words']) ? ' NOT' : '') . (empty($modSettings['search_match_words']) || $search_data['no_regexp'] ? ' LIKE ' : ' RLIKE ') . '{string:complex_body_' . $count . '}';
+				$query_where[] = 'm.body' . (in_array($regularWord, $query_params['excluded_words']) ? ' NOT' : '') . (empty($modSettings['search_match_words']) || $search_data['no_regexp'] ? ' LIKE ' : 'RLIKE') . '{string:complex_body_' . $count . '}';
 				$query_params['complex_body_' . $count++] = empty($modSettings['search_match_words']) || $search_data['no_regexp'] ? '%' . strtr($regularWord, array('_' => '\\_', '%' => '\\%')) . '%' : '[[:<:]]' . addcslashes(preg_replace(array('/([\[\]$.+*?|{}()])/'), array('[$1]'), $regularWord), '\\\'') . '[[:>:]]';
 			}
 
@@ -205,69 +188,42 @@ class fulltext_search extends search_api
 		if (!empty($query_params['excluded_phrases']) && empty($modSettings['search_force_index']))
 			foreach ($query_params['excluded_phrases'] as $phrase)
 			{
-				$query_where[] = 'subject NOT' . (empty($modSettings['search_match_words']) || $search_data['no_regexp'] ? ' LIKE ' : ' RLIKE ') . '{string:exclude_subject_phrase_' . $count . '}';
+				$query_where[] = 'subject NOT ' . (empty($modSettings['search_match_words']) || $search_data['no_regexp'] ? ' LIKE ' : 'RLIKE') . '{string:exclude_subject_phrase_' . $count . '}';
 				$query_params['exclude_subject_phrase_' . $count++] = empty($modSettings['search_match_words']) || $search_data['no_regexp'] ? '%' . strtr($phrase, array('_' => '\\_', '%' => '\\%')) . '%' : '[[:<:]]' . addcslashes(preg_replace(array('/([\[\]$.+*?|{}()])/'), array('[$1]'), $phrase), '\\\'') . '[[:>:]]';
 			}
 		$count = 0;
 		if (!empty($query_params['excluded_subject_words']) && empty($modSettings['search_force_index']))
 			foreach ($query_params['excluded_subject_words'] as $excludedWord)
 			{
-				$query_where[] = 'subject NOT' . (empty($modSettings['search_match_words']) || $search_data['no_regexp'] ? ' LIKE ' : ' RLIKE ') . '{string:exclude_subject_words_' . $count . '}';
+				$query_where[] = 'subject NOT ' . (empty($modSettings['search_match_words']) || $search_data['no_regexp'] ? ' LIKE ' : 'RLIKE') . '{string:exclude_subject_words_' . $count . '}';
 				$query_params['exclude_subject_words_' . $count++] = empty($modSettings['search_match_words']) || $search_data['no_regexp'] ? '%' . strtr($excludedWord, array('_' => '\\_', '%' => '\\%')) . '%' : '[[:<:]]' . addcslashes(preg_replace(array('/([\[\]$.+*?|{}()])/'), array('[$1]'), $excludedWord), '\\\'') . '[[:>:]]';
 			}
 
 		if (!empty($modSettings['search_simple_fulltext']))
 		{
-			if ($smcFunc['db_title'] === POSTGRE_TITLE)
-			{
-				$language_ftx = $smcFunc['db_search_language']();
-
-				$query_where[] = 'to_tsvector({string:language_ftx},body) @@ plainto_tsquery({string:language_ftx},{string:body_match})';
-				$query_params['language_ftx'] = $language_ftx;
-			}
-			else
-				$query_where[] = 'MATCH (body) AGAINST ({string:body_match})';
+			$query_where[] = 'MATCH (body) AGAINST ({string:body_match})';
 			$query_params['body_match'] = implode(' ', array_diff($words['indexed_words'], $query_params['excluded_index_words']));
+		}
+		elseif ($this->canDoBooleanSearch)
+		{
+			$query_params['boolean_match'] = '';
+			foreach ($words['indexed_words'] as $fulltextWord)
+				$query_params['boolean_match'] .= (in_array($fulltextWord, $query_params['excluded_index_words']) ? '-' : '+') . $fulltextWord . ' ';
+			$query_params['boolean_match'] = substr($query_params['boolean_match'], 0, -1);
+
+			$query_where[] = 'MATCH (body) AGAINST ({string:boolean_match} IN BOOLEAN MODE)';
 		}
 		else
 		{
-			$query_params['boolean_match'] = '';
-
-			// remove any indexed words that are used in the complex body search terms
-			$words['indexed_words'] = array_diff($words['indexed_words'], $words['complex_words']);
-
-			if ($smcFunc['db_title'] === POSTGRE_TITLE)
+			$count = 0;
+			foreach ($words['indexed_words'] as $fulltextWord)
 			{
-				$row = 0;
-				foreach ($words['indexed_words'] as $fulltextWord)
-				{
-					$query_params['boolean_match'] .= ($row <> 0 ? '&' : '');
-					$query_params['boolean_match'] .= (in_array($fulltextWord, $query_params['excluded_index_words']) ? '!' : '') . $fulltextWord . ' ';
-					$row++;
-				}
-			}
-			else
-				foreach ($words['indexed_words'] as $fulltextWord)
-					$query_params['boolean_match'] .= (in_array($fulltextWord, $query_params['excluded_index_words']) ? '-' : '+') . $fulltextWord . ' ';
-
-			$query_params['boolean_match'] = substr($query_params['boolean_match'], 0, -1);
-
-			// if we have bool terms to search, add them in
-			if ($query_params['boolean_match'])
-			{
-				if ($smcFunc['db_title'] === POSTGRE_TITLE)
-				{
-					$language_ftx = $smcFunc['db_search_language']();
-
-					$query_where[] = 'to_tsvector({string:language_ftx},body) @@ plainto_tsquery({string:language_ftx},{string:boolean_match})';
-					$query_params['language_ftx'] = $language_ftx;
-				}
-				else
-					$query_where[] = 'MATCH (body) AGAINST ({string:boolean_match} IN BOOLEAN MODE)';
+				$query_where[] = (in_array($fulltextWord, $query_params['excluded_index_words']) ? 'NOT ' : '') . 'MATCH (body) AGAINST ({string:fulltext_match_' . $count . '})';
+				$query_params['fulltext_match_' . $count++] = $fulltextWord;
 			}
 		}
 
-		$ignoreRequest = $smcFunc['db_search_query']('insert_into_log_messages_fulltext', ($smcFunc['db_support_ignore'] ? ('
+		$ignoreRequest = $smcFunc['db_search_query']('insert_into_log_messages_fulltext', ($smcFunc['db_support_ignore'] ? ( '
 			INSERT IGNORE INTO {db_prefix}' . $search_data['insert_into'] . '
 				(' . implode(', ', array_keys($query_select)) . ')') : '') . '
 			SELECT ' . implode(', ', $query_select) . '

@@ -1,56 +1,47 @@
 <?php
 
 /**
- * This file has the important job of taking care of help messages and the help center.
- *
  * Simple Machines Forum (SMF)
  *
  * @package SMF
- * @author Simple Machines https://www.simplemachines.org
- * @copyright 2020 Simple Machines and individual contributors
- * @license https://www.simplemachines.org/about/smf/license.php BSD
+ * @author Simple Machines http://www.simplemachines.org
+ * @copyright 2011 Simple Machines
+ * @license http://www.simplemachines.org/about/smf/license.php BSD
  *
- * @version 2.1 RC3
+ * @version 2.0.16
  */
 
 if (!defined('SMF'))
-	die('No direct access...');
+	die('Hacking attempt...');
 
-/**
- * Redirect to the user help ;).
- * It loads information needed for the help section.
- * It is accessed by ?action=help.
- *
- * Uses Help template and Manual language file.
- */
+/*	This file has the important job of taking care of help messages and the
+	help center.  It does this with two simple functions:
+
+	void ShowHelp()
+		- loads information needed for the help section.
+		- accesed by ?action=help.
+		- uses the Help template and Manual language file.
+
+	void ShowAdminHelp()
+		- shows a popup for administrative or user help.
+		- uses the help parameter to decide what string to display and where
+		  to get the string from. ($helptxt or $txt?)
+		- loads the ManagePermissions language file if the help starts with
+		  permissionhelp.
+		- uses the Help template, popup sub template, no layers.
+		- accessed via ?action=helpadmin;help=??.
+*/
+
+// Redirect to the user help ;).
 function ShowHelp()
-{
-	loadTemplate('Help');
-	loadLanguage('Manual');
-
-	$subActions = array(
-		'index' => 'HelpIndex',
-	);
-
-	// CRUD $subActions as needed.
-	call_integration_hook('integrate_manage_help', array(&$subActions));
-
-	$sa = isset($_GET['sa'], $subActions[$_GET['sa']]) ? $_GET['sa'] : 'index';
-	call_helper($subActions[$sa]);
-}
-
-/**
- * The main page for the Help section
- */
-function HelpIndex()
 {
 	global $scripturl, $context, $txt;
 
+	loadTemplate('Help');
+	loadLanguage('Manual');
+
 	// We need to know where our wiki is.
 	$context['wiki_url'] = 'https://wiki.simplemachines.org/smf';
-	$context['wiki_prefix'] = 'SMF2.1:';
-
-	$context['canonical_url'] = $scripturl . '?action=help';
 
 	// Sections were are going to link...
 	$context['manual_sections'] = array(
@@ -77,19 +68,10 @@ function HelpIndex()
 	$context['sub_template'] = 'manual';
 }
 
-/**
- * Show some of the more detailed help to give the admin an idea...
- * It shows a popup for administrative or user help.
- * It uses the help parameter to decide what string to display and where to get
- * the string from. ($helptxt or $txt?)
- * It is accessed via ?action=helpadmin;help=?.
- *
- * Uses ManagePermissions language file, if the help starts with permissionhelp.
- * @uses template_popup() with no layers.
- */
+// Show some of the more detailed help to give the admin an idea...
 function ShowAdminHelp()
 {
-	global $txt, $helptxt, $context, $scripturl, $boarddir, $boardurl;
+	global $txt, $helptxt, $context, $scripturl;
 
 	if (!isset($_GET['help']) || !is_string($_GET['help']))
 		fatal_lang_error('no_access', false);
@@ -106,9 +88,6 @@ function ShowAdminHelp()
 
 	loadTemplate('Help');
 
-	// Allow mods to load their own language file here
-	call_integration_hook('integrate_helpadmin');
-
 	// Set the page title to something relevant.
 	$context['page_title'] = $context['forum_name'] . ' - ' . $txt['help'];
 
@@ -123,24 +102,6 @@ function ShowAdminHelp()
 		$context['help_text'] = $txt[$_GET['help']];
 	else
 		$context['help_text'] = $_GET['help'];
-
-	switch ($_GET['help']) {
-		case 'cal_short_months':
-			$context['help_text'] = sprintf($context['help_text'], $txt['months_short'][1], $txt['months_titles'][1]);
-			break;
-		case 'cal_short_days':
-			$context['help_text'] = sprintf($context['help_text'], $txt['days_short'][1], $txt['days'][1]);
-			break;
-		case 'cron_is_real_cron':
-			$context['help_text'] = sprintf($context['help_text'], $boarddir, $boardurl);
-			break;
-		case 'enableSpellChecking':
-			$context['help_text'] = sprintf($context['help_text'], ((function_exists('pspell_new') || function_exists('enchant_broker_init')) ? $helptxt['enableSpellCheckingSupported'] : $helptxt['enableSpellCheckingUnsupported']));
-			break;
-		case 'queryless_urls':
-			$context['help_text'] = sprintf($context['help_text'], (isset($_SERVER['SERVER_SOFTWARE']) && (strpos($_SERVER['SERVER_SOFTWARE'], 'Apache') !== false || strpos($_SERVER['SERVER_SOFTWARE'], 'lighttpd') !== false) ? $helptxt['queryless_urls_supported'] : $helptxt['queryless_urls_unsupported']));
-			break;
-	}
 
 	// Does this text contain a link that we should fill in?
 	if (preg_match('~%([0-9]+\$)?s\?~', $context['help_text'], $match))

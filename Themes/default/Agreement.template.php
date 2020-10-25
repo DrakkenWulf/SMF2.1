@@ -4,11 +4,11 @@
  * Simple Machines Forum (SMF)
  *
  * @package SMF
- * @author Simple Machines https://www.simplemachines.org
- * @copyright 2020 Simple Machines and individual contributors
- * @license https://www.simplemachines.org/about/smf/license.php BSD
+ * @author Simple Machines
+ * @copyright 2018 Simple Machines
+ * @license http://www.simplemachines.org/about/smf/license.php BSD
  *
- * @version 2.1 RC3
+ * @version 2.0.16
  */
 
 // The main sub template - show the agreement and/or privacy policy
@@ -24,63 +24,70 @@ function template_main()
 	{
 		echo '
 		<div class="cat_bar">
-			<h3 class="catbg">', $txt['agreement' . (!empty($context['can_accept_agreement']) ? '_updated' : '')], '</h3>
+			<h3 class="catbg">', $txt['agreement' . ($context['can_accept_agreement'] ? '_updated' : '')], '</h3>
 		</div>';
 
-		if (!empty($context['can_accept_agreement']))
+		if ($context['can_accept_agreement'])
 		{
 			echo '
-		<div class="information noup">
+		<p class="description">
 			', $txt['agreement_updated_desc'], '
-		</div>';
+		</p>';
 		}
 		elseif (!empty($context['agreement_accepted_date']))
 		{
 			echo '
-		<div class="information noup">
+		<p class="description">
 			', sprintf($txt['agreement_accepted'], timeformat($context['agreement_accepted_date'], false)), '
-		</div>';
+		</p>';
 		}
 
 		echo '
-		<div class="windowbg noup">
-			', $context['agreement'], '
-		</div>';
+		<span class="upperframe"><span></span></span>
+		<div class="roundframe">
+			<div>', $context['agreement'], '</div>
+		</div>
+		<span class="lowerframe"><span></span></span>';
 	}
 
-	if (!empty($context['privacy_policy']))
+	if (!empty($context['policy']))
 	{
+		if (!empty($context['agreement']))
+			echo '<br />';
+
 		echo '
 		<div class="cat_bar">
-			<h3 class="catbg">', $txt['privacy_policy' . (!empty($context['can_accept_privacy_policy']) ? '_updated' : '')], '</h3>
+			<h3 class="catbg">', $txt['privacy_policy' . ($context['can_accept_privacy_policy'] ? '_updated' : '')], '</h3>
 		</div>';
 
-		if (!empty($context['can_accept_privacy_policy']))
+		if ($context['can_accept_privacy_policy'])
 		{
 			echo '
-		<div class="information noup">
+		<p class="description">
 			', $txt['privacy_policy_updated_desc'], '
-		</div>';
+		</p>';
 		}
 		elseif (!empty($context['privacy_policy_accepted_date']))
 		{
 			echo '
-		<div class="information noup">
+		<p class="description">
 			', sprintf($txt['privacy_policy_accepted'], timeformat($context['privacy_policy_accepted_date'], false)), '
-		</div>';
+		</p>';
 		}
 
 		echo '
-		<div class="windowbg noup">
-			', $context['privacy_policy'], '
-		</div>';
+		<span class="upperframe"><span></span></span>
+		<div class="roundframe">
+			<div>', $context['policy'], '</div>
+		</div>
+		<span class="lowerframe"><span></span></span>';
 	}
 
 	if (!empty($context['accept_doc']))
 		echo '
 		<div id="confirm_buttons">
-			<input type="submit" value="', $txt['agree'], '" class="button">
-			<input type="hidden" name="', $context['session_var'], '" value="', $context['session_id'], '">
+			<input type="submit" value="', $txt['agree'], '" class="button_submit" />
+			<input type="hidden" name="', $context['session_var'], '" value="', $context['session_id'], '" />
 		</div>
 	</form>';
 }
