@@ -13,7 +13,8 @@ function template_control_quick_login() {
   
   //Button to show or hide the login form
   echo '
-    <div id="show-hide-login" class="show-hide-login ', $context['user']['is_logged'] ? 'logout-icon' : 'login-icon', '"></div>';
+    <div id="show-hide-login" class="show-hide-login ', $context['user']['is_logged'] ? 'logout-icon' : 'login-icon', '">',
+    $context['user']['is_logged'] ? $txt['logout'] : $txt['login'],'</div>';
 
   //Script to logout
   if ($context['user']['is_logged']) {
@@ -89,7 +90,7 @@ function template_control_quick_search() {
 
   //Button to show or hide the login form
   echo '
-    <div id="show-hide-search" class="show-hide-search magnifier-icon" onclick="toggleSearch"></div>';
+    <div id="show-hide-search" class="show-hide-search magnifier-icon" onclick="toggleSearch">', $txt['search'],'</div>';
 
   //Funtion called by the button to show or hide the search form
   echo '

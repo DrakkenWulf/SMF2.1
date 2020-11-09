@@ -6,6 +6,11 @@
 * License: http://www.opensource.org/licenses/mit-license.php
 */
 
+// my additions
+$txt['private-messages'] = 'Private';
+$txt['unread-posts'] = 'Posts';
+$txt['inbox'] = 'Inbox';
+$txt['explore'] = 'Explore';
 
 //Time since post or message
 $txt['iSecondAgo'] = 'second ago';
