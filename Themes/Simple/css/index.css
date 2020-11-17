@@ -564,7 +564,20 @@ input#input-file {
   top: 10px;
   height: 24px;
   width: 24px;
+  text-align: center;
+  line-height: 24px;
   background-size: 24px 24px !important;
+  /* undone by media query below */
+  font-size: 0%;
+}
+
+@media only screen and (min-width: 768px)
+{
+  #show-hide-search, #show-hide-login {
+    width: 180px;
+    background-size: 0px 0px !important;
+    font-size: 100%;
+  }
 }
 
 #show-hide-search {
@@ -640,13 +653,26 @@ input#input-file {
   float: right;
   width: 55px;
   height: 43px;
+  text-align: center;
+  line-height: 43px;
   background-size: 24px 24px !important;
+  /* undone by media query below */
+  font-size: 0%;
 }
 
 .toolbar:after {
   content: '';
   width: 100%;
   display: inline-block;
+}
+
+@media only screen and (min-width: 768px)
+{
+  .toolbar > div > .toolbar-icon {
+    width: 180px;
+    background-size: 0px 0px !important;
+    font-size: 100%;
+  }
 }
 
 .unread-count {

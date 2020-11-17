@@ -252,7 +252,7 @@ function template_body_below() {
         <div class="unread-count unreadPosts"', ($unreadTopicCount > 0 && $context['user']['is_logged'] && !$disable_unread_topic_count ? '>' . $unreadTopicCount : ' style="display:none">'), '</div>
       </div>
       <div>
-        <div class="toolbar-icon" onclick="$(this).fadeTo(200 , 0.3).fadeTo(200 , 1.0);go(\'home\');" style="background: url(' . $settings['theme_url'] . '/images/icons/home.png) transparent center no-repeat;">', $txt['explore'],'</div>
+        <div class="toolbar-icon" onclick="$(this).fadeTo(200 , 0.3).fadeTo(200 , 1.0);go(\'home\');" style="background: url(' . $settings['theme_url'] . '/images/icons/files.png) transparent center no-repeat;">', $txt['explore'],'</div>
       </div>
     </div>';
 }
