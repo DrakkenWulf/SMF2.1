@@ -16,8 +16,11 @@ function template_registration_agreement() {
 		<form data-ajax="false" action="', $scripturl, '?action=register" method="post" accept-charset="', $context['character_set'], '" id="registration">
 			<h2>' . $txt['iAgreement'] . '</h2>
 			<div class="agreement">
-			', $agreement[0], ' <a style="color: #007AFF;" href="#" onclick="this.parentNode.innerHTML=\'', addslashes($context['agreement']), '\'; return false;">[', $txt['iMore'], '...]</a>
-			</div>';
+      ', 
+    // don't use "more", just show all.
+    //$agreement[0], ' <a style="color: #007AFF;" href="#" onclick="this.parentNode.innerHTML=\'', addslashes($context['agreement']), '\'; return false;">[', $txt['iMore'], '...]</a>',
+    $context['agreement'],
+			'</div>';
   
   echo '
       <div class="buttons">';
