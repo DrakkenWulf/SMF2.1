@@ -250,7 +250,7 @@ function template_body_below() {
         <div class="unread-count unread-messages"', ($context['user']['unread_messages'] > 0 && $context['user']['is_logged'] && !$disable_personal_message_count ? '>' . $context['user']['unread_messages'] : ' style="display:none;">'), '</div>
       </div>
       <div>
-        <div class="toolbar-icon" onclick="', $context['user']['is_logged'] ? '$(this).fadeTo(200 , 0.3).fadeTo(200 , 1.0);go(\'unreadreplies\');' : '', '" style="background: url(' . $settings['theme_url'] . '/images/icons/newpost.png) transparent center no-repeat; ', $context['user']['is_logged'] ? '' : ' opacity: 0.3;', '">', $txt['unread-posts'],'</div>
+        <div class="toolbar-icon" onclick="', $context['user']['is_logged'] ? '$(this).fadeTo(200 , 0.3).fadeTo(200 , 1.0);go(\'unread\');' : '', '" style="background: url(' . $settings['theme_url'] . '/images/icons/newpost.png) transparent center no-repeat; ', $context['user']['is_logged'] ? '' : ' opacity: 0.3;', '">', $txt['unread-posts'],'</div>
         <div class="unread-count unreadPosts"', ($unreadTopicCount > 0 && $context['user']['is_logged'] && !$disable_unread_topic_count ? '>' . $unreadTopicCount : ' style="display:none">'), '</div>
       </div>
       <div>
