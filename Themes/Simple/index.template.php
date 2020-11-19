@@ -159,15 +159,17 @@ function template_body_below() {
   
   //Default mode button
   $themeNumber = '1';
+  /*
   if (!empty($modSettings['id_default_theme'])) {
     $themeNumber = $modSettings['id_default_theme'];
   } else {
     $themeNumber = $modSettings['theme_guests'];
   }
+  */
   $currentUrl = get_current_url();
   $backLink = "index.php?theme=" . $themeNumber . ";";
   if (strpos($currentUrl, 'index.php') !== false) {
-    $backLink = $currentUrl;
+    $backLink = substr($currentUrl, strpos($currentUrl, 'index.php'));
     $backLink.= strpos($backLink, '?') == false ? '?' : (substr($backLink, -1) !== ';' ? ';' : '');
     $backLink.= strpos($backLink, 'theme=') == false ? 'theme=' . $themeNumber . ';' : '';
     $backLink = preg_replace("/theme=\d+/", "theme=" . $themeNumber, $backLink);
