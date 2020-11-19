@@ -64,6 +64,7 @@ function template_control_login_form() {
 
   echo '
     <form data-ajax="false" action="', $scripturl, '?action=login2" name="frmLogin" method="post" accept-charset="', $context['character_set'], '" ', empty($context['disable_login_hashing']) ? ' onsubmit="hashLoginPassword(this, \'' . $context['session_id'] . '\');"' : '', '>
+    <input type="hidden" name="', $context['session_var'], '" value="', $context['session_id'], '" />    
       <div class="no-left-padding input-container pad-top">';
   echo '<span class="input-label">' . $txt['username'] . '</span>';
   echo '<input class="user" type="text" tabindex="', $context['tabindex']++, '" name="user" />
@@ -117,7 +118,8 @@ function template_control_quick_search() {
   echo '
     <div id="search-bar" class="input-container">
       <form action="', $scripturl, '?action=search2" method="post" accept-charset="', $context['character_set'], '" name="searchform" id="search-form">
-        <input id="search-text" type="text" name="search"', !empty($context['search_params']['search']) ? ' value="' . $context['search_params']['search'] . '"' : '', !empty($context['search_string_limit']) ? ' maxlength="' . $context['search_string_limit'] . '"' : '', ' tabindex="', $context['tabindex']++, '" />
+      <input type="hidden" name="', $context['session_var'], '" value="', $context['session_id'], '" />    
+      <input id="search-text" type="text" name="search"', !empty($context['search_params']['search']) ? ' value="' . $context['search_params']['search'] . '"' : '', !empty($context['search_string_limit']) ? ' maxlength="' . $context['search_string_limit'] . '"' : '', ' tabindex="', $context['tabindex']++, '" />
         <input type="submit" class="button input-button" value="' . $txt['iSearch'] . '" onclick="if(document.searchform.search.value.length<3){alert(\'', $txt['iSearchAlert'], '\');return false;}" />
       </form>
     </div>';
@@ -228,7 +230,7 @@ function template_control_quick_reply() {
         <input type="hidden" name="seqnum" value="' . $context['form_sequence_number'] . '" />
         <input type="hidden" name="topic" value="' . $context['current_topic'] . '" />
         <input type="hidden" name="' . $context['session_var'] . '" value="' . $context['session_id'] . '" />    
-        <input type="hidden" name="goback" value="' . $options['return_to_post'] . '" />
+        <input type="hidden" name="goback" value="' . /*$options['return_to_post']*/'' . '" />
         <input type="hidden" name="icon" value="">
       </form>';
   
