@@ -13,6 +13,7 @@ function template_main() {
   //Loop through all the categories
   $firstContent = true;
   foreach ($context['categories'] as $category) {
+    echo '<h1 class="catbg">' . $category['name'] . '</h1>';
     echo '
       <ul class="content-list', $firstContent ? ' first-content">' : '">';
     $firstContent = false;
@@ -22,7 +23,11 @@ function template_main() {
       echo '
         <li onclick="this.className = \'clicked\'; $.mobile.changePage(\'' . $board['href'] . '\');">';
       echo '
-          <div class="title', ($context['user']['is_logged'] && ($board['new'] || $board['children_new'])) ? ' short-title' : '', '">', $board['name'], '</div>';
+          <div class="title', 
+          ($context['user']['is_logged'] && ($board['new'] || $board['children_new'])) ? ' short-title' : '', '">', 
+          $board['name'], 
+          '</div>';
+      echo '<div class="subtitle">', $board['description'] , '</div>';
       if ($context['user']['is_logged'] && ($board['new'] || $board['children_new'])) {
         echo '
           <div class="new">' . $txt['iNew'] . '</div>';
@@ -38,6 +43,7 @@ function template_main() {
   }
   
   //List the online users in order of activity.
+  /* DDP - i'm not fond of "who's online" lists.
   if (!empty($context['users_online'])) {
     echo '
       <div class="content-list">';
@@ -46,6 +52,7 @@ function template_main() {
     echo '
       </div>';
   }
+  */
 }
 
 ?>

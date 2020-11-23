@@ -341,6 +341,16 @@ h4 {
   color: #007AFF;
 }
 
+.subtitle {
+  vertical-align: top;
+  color: grey;
+  overflow: '';
+  white-space: nowrap;
+  font-size: 16px !important;
+  float: right;
+  margin-right: 24px;
+}
+
 
 /* Our generic list of content: boards, topics, messages, unread posts, recent posts, personal messages etc. */
 
