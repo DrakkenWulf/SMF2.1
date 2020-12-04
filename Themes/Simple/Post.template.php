@@ -144,6 +144,7 @@ function template_main() {
       <input type="hidden" name="topic" value="', $context['current_topic'], '" />
       <input type="hidden" name="', $context['session_var'], '" value="', $context['session_id'], '" />    
       <input type="hidden" name="goback" value="', $options['return_to_post'], '" />
+      <input type="hidden" name="notify" value="1" /><!-- always turn on notify when replying -->
       <input type="hidden" name="icon" value="">
     </form>';
 }
