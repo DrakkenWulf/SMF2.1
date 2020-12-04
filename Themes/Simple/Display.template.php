@@ -63,11 +63,20 @@ function template_main() {
   }
   
   //Quoting and reply buttons
+  // We disable quoting in this site, it confuses users to easily.
+  if (false)
+  {
   echo '  
     <div class="buttons">
       <button class="button two-buttons" id="quoting" onclick="toggleQuoting();">', (isset($_COOKIE['disablequoting'])) ? $txt['iQuoting'] . ' ' . $txt['iOff'] : $txt['iQuoting'] . ' ' . $txt['iOn'], '</button>
       <button class="button two-buttons" onclick="$.mobile.changePage(\'' . $scripturl . '?action=post;topic=' . $context['current_topic'] . '.' . $context['start'] . ';num_replies=' . $context['num_replies'] . '\');">', $txt['reply'], '</button>
     </div>';
+  } else {
+    echo '  
+    <div class="buttons">
+      <button class="button buttons" onclick="$.mobile.changePage(\'' . $scripturl . '?action=post;topic=' . $context['current_topic'] . '.' . $context['start'] . ';num_replies=' . $context['num_replies'] . '\');">', $txt['reply'], '</button>
+    </div>';
+  }
   
   //Display the poll if one exists
   if ($context['is_poll']) {
@@ -192,8 +201,16 @@ function template_main() {
         </div>';
 
       //The main message content (date/time posted, then the message)
+      if (false)  // disable quoting on this site, it's confusing.
+      {
+        echo '
+        <div class="message"', (!isset($_COOKIE['disablequoting']) && $context['can_reply']) ? '  onclick="$.mobile.changePage(\'' . $scripturl . '?action=post;quote=' . $message['id'] . ';topic=' . $context['current_topic'] . '.' . $context['start'] . ';num_replies=' . $context['num_replies'] . ';' . $context['session_var'] . '=' . $context['session_id'] . '\')"' : '', '>';
+      } else {
+        echo '
+        <div class="message"', ($context['can_reply']) ? '  onclick="$.mobile.changePage(\'' . $scripturl . '?action=post;topic=' . $context['current_topic'] . '.' . $context['start'] . ';num_replies=' . $context['num_replies'] . ';' . $context['session_var'] . '=' . $context['session_id'] . '\')"' : '', '>';
+      }
+
       echo '
-        <div class="message"', (!isset($_COOKIE['disablequoting']) && $context['can_reply']) ? '  onclick="$.mobile.changePage(\'' . $scripturl . '?action=post;quote=' . $message['id'] . ';topic=' . $context['current_topic'] . '.' . $context['start'] . ';num_replies=' . $context['num_replies'] . ';' . $context['session_var'] . '=' . $context['session_id'] . '\')"' : '', '>
           <span class="message-time" style="font-style: italic;font-size:11px;display:inline-block;margin-bottom:3px;">', str_replace('strong', 'span', $message['time']), '</span><br />';
 
       //The message body, replace smilies with retina smilies included in the theme and remove bold from "Today"
