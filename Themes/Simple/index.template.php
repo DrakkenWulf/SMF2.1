@@ -214,24 +214,29 @@ function template_body_below() {
             var unreadTopicCount = ', $unreadTopicCount, ';
             var unreadMessageCount = ', $context['user']['unread_messages'], ';
 
-            var unreadTopicCountElement = $(".unreadPosts").last();
-            var unreadMessageCountElement = $(".unread-messages").last();
-
-            unreadTopicCountElement.get()[0].innerHTML = unreadTopicCount;
-            unreadMessageCountElement.get()[0].innerHTML = unreadMessageCount;
-
-            if (unreadTopicCount != 0) {
-              unreadTopicCountElement.show();
+            if (false)
+            {
+              var unreadMessageCountElement = $(".unread-messages").last();
+              unreadMessageCountElement.get()[0].innerHTML = unreadMessageCount;
+              if (unreadMessageCount != 0) {
+                unreadMessageCountElement.show();
+              }
+              else {
+                unreadMessageCountElement.hide();
+              }
             }
-            else {
-              unreadTopicCountElement.hide();
-            }
 
-            if (unreadMessageCount != 0) {
-              unreadMessageCountElement.show();
-            }
-            else {
-              unreadMessageCountElement.hide();
+            if (true)
+            {
+              var unreadTopicCountElement = $(".unreadPosts").last();            
+              unreadTopicCountElement.get()[0].innerHTML = unreadTopicCount;
+
+              if (unreadTopicCount != 0) {
+                unreadTopicCountElement.show();
+              }
+              else {
+                unreadTopicCountElement.hide();
+              }
             }
           });
         </script>';
@@ -244,11 +249,18 @@ function template_body_below() {
     <div id="toolbar" class="toolbar" data-role="footer" data-id="footer" data-position="fixed" data-tap-toggle="false" data-enhance="true">
       <div>
         <div class="toolbar-icon" onclick="', $context['user']['is_logged'] ? '$(this).fadeTo(200 , 0.3).fadeTo(200 , 1.0);go(\'profile\');' : '', '" style="background: url(' . $settings['theme_url'] . '/images/icons/person.png) transparent center no-repeat; ', $context['user']['is_logged'] ? '' : ' opacity: 0.3;', '">', $txt['profile'],'</div>
-      </div>
+      </div>';
+      if (false) 
+      {  
+        // some users will have private messages supported, but not right now.
+        // also have to turn on unread-messages in js above
+      echo '
       <div>
         <div class="toolbar-icon" onclick="', $context['user']['is_logged'] ? '$(this).fadeTo(200 , 0.3).fadeTo(200 , 1.0);go(\'pm\');' : '', '" style="background: url(' . $settings['theme_url'] . '/images/icons/messages.png) transparent center no-repeat; ', $context['user']['is_logged'] ? '' : ' opacity: 0.3;', '">', $txt['private-messages'],'</div>
         <div class="unread-count unread-messages"', ($context['user']['unread_messages'] > 0 && $context['user']['is_logged'] && !$disable_personal_message_count ? '>' . $context['user']['unread_messages'] : ' style="display:none;">'), '</div>
-      </div>
+      </div>';
+    }
+    echo '
       <div>
         <div class="toolbar-icon" onclick="', $context['user']['is_logged'] ? '$(this).fadeTo(200 , 0.3).fadeTo(200 , 1.0);go(\'unread\');' : '', '" style="background: url(' . $settings['theme_url'] . '/images/icons/newpost.png) transparent center no-repeat; ', $context['user']['is_logged'] ? '' : ' opacity: 0.3;', '">', $txt['unread-posts'],'</div>
         <div class="unread-count unreadPosts"', ($unreadTopicCount > 0 && $context['user']['is_logged'] && !$disable_unread_topic_count ? '>' . $unreadTopicCount : ' style="display:none">'), '</div>
