@@ -78,6 +78,7 @@ $txt['iChoose'] = 'Choose';
 $txt['iAgreement'] = 'Registration Agreement';
 $txt['iMore'] = 'more';
 $txt['iDone'] = 'Done';
+$txt['iUsernameDetail'] = 'Use your common name that others would recognize.';
 
 //Search template
 $txt['iSearchAlert'] = 'Please enter a word of at least 3 letters to search';

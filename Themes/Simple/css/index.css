@@ -538,6 +538,11 @@ button[disabled] {
   margin-right: 5px;
 }
 
+.input-detail {
+  font-size: 12px;
+  margin-left: 80px;
+}
+
 .input-container input[type="submit"] {
   width: 80px;
 }
