@@ -114,7 +114,6 @@ function template_registration_form() {
   echo '<div class="header">User</div>';
   
   echo '<div class="no-left-padding input-container" style="padding-top: 13px;">';
-  echo '<span class="input-detail">' . $txt['iUsernameDetail'] . '</span><br>';
   echo '<span class="input-label">' . $txt['username'] . '</span>';
   echo '<input type="text" name="user" id="smf_autov_username" size="30" tabindex="', $context['tabindex']++, '" maxlength="25" value="', isset($context['username']) ? $context['username'] : '', '" />';
   echo '<span id="smf_autov_username_div" style="display: none;">
